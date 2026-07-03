@@ -60,7 +60,7 @@ const EXPORT_OPTIONS: ExportOption[] = [
     label: "Brand Report",
     icon: "lucide:tag",
     description: "Export brand-level summary",
-    formats: ["csv", "excel"],
+    formats: ["excel"],
     requireDateRange: true,
   },
 ];
@@ -111,11 +111,9 @@ export const ExportButton: React.FC<ExportButtonProps> = ({ filters, disabled })
               <div className="flex items-center w-full">
                 <Icon icon={option.icon} className="mr-2 h-4 w-4" />
                 <span className="font-medium">{option.label}</span>
-                {option.formats.includes("excel") && (
-                  <span className="ml-auto text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
-                    CSV + XLSX
-                  </span>
-                )}
+                <span className="ml-auto text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                  {option.formats.map((f) => (f === "excel" ? "XLSX" : "CSV")).join(" + ")}
+                </span>
               </div>
               <p className="text-xs text-muted-foreground ml-6">{option.description}</p>
             </DropdownMenuItem>

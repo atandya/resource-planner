@@ -20,6 +20,28 @@ import type { ExportOption, ExportFormat } from "./ExportButton";
 import { downloadCsvFile, generateExportFilename } from "@/lib/export/csv-export";
 import { downloadExcelFile, generateExcelFilename } from "@/lib/export/excel-export";
 
+const FORMAT_CHOICES: Array<{
+  value: ExportFormat;
+  label: string;
+  description: string;
+  icon: string;
+  iconClassName?: string;
+}> = [
+  {
+    value: "csv",
+    label: "CSV",
+    description: "Opens in Excel",
+    icon: "lucide:file-text",
+  },
+  {
+    value: "excel",
+    label: "Excel",
+    description: "Multi-sheet with formatting",
+    icon: "lucide:file-spreadsheet",
+    iconClassName: "text-green-600",
+  },
+];
+
 interface ExportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -127,6 +149,8 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
         apiUrl = `/api/export/assignments/excel?${params.toString()}`;
       } else if (format === "excel" && exportOption.type === "conflicts") {
         apiUrl = `/api/export/conflicts/excel?${params.toString()}`;
+      } else if (format === "excel" && exportOption.type === "brand") {
+        apiUrl = `/api/export/brand/excel?${params.toString()}`;
       } else {
         apiUrl = `/api/export/${exportOption.type}?${params.toString()}`;
       }
@@ -285,30 +309,31 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           <div className="space-y-2">
             <Label className="text-sm font-medium">Format</Label>
             <RadioGroup value={format} onValueChange={(v) => setFormat(v as ExportFormat)}>
-              {exportOption.formats.includes("csv") && (
-                <div className="flex items-center space-x-2 rounded-md border p-3 hover:bg-accent">
-                  <RadioGroupItem value="csv" id="csv" />
-                  <Label htmlFor="csv" className="flex-1 cursor-pointer">
-                    <div className="flex items-center gap-2">
-                      <Icon icon="lucide:file-text" className="h-4 w-4" />
-                      <span className="font-medium">CSV</span>
-                      <span className="text-xs text-muted-foreground">- Opens in Excel</span>
-                    </div>
-                  </Label>
-                </div>
-              )}
-              {exportOption.formats.includes("excel") && (
-                <div className="flex items-center space-x-2 rounded-md border p-3 hover:bg-accent">
-                  <RadioGroupItem value="excel" id="excel" />
-                  <Label htmlFor="excel" className="flex-1 cursor-pointer">
-                    <div className="flex items-center gap-2">
-                      <Icon icon="lucide:file-spreadsheet" className="h-4 w-4 text-green-600" />
-                      <span className="font-medium">Excel</span>
-                      <span className="text-xs text-muted-foreground">- Multi-sheet with formatting</span>
-                    </div>
-                  </Label>
-                </div>
-              )}
+              {FORMAT_CHOICES.map((choice) => {
+                const isAvailable = exportOption.formats.includes(choice.value);
+                return (
+                  <div
+                    key={choice.value}
+                    className={`flex items-center space-x-2 rounded-md border p-3 ${
+                      isAvailable ? "hover:bg-accent" : "opacity-50"
+                    }`}
+                  >
+                    <RadioGroupItem value={choice.value} id={choice.value} disabled={!isAvailable} />
+                    <Label
+                      htmlFor={choice.value}
+                      className={`flex-1 ${isAvailable ? "cursor-pointer" : "cursor-not-allowed"}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Icon icon={choice.icon} className={`h-4 w-4 ${choice.iconClassName}`} />
+                        <span className="font-medium">{choice.label}</span>
+                        <span className="text-xs text-muted-foreground">
+                          - {isAvailable ? choice.description : "Not available for this report"}
+                        </span>
+                      </div>
+                    </Label>
+                  </div>
+                );
+              })}
             </RadioGroup>
           </div>
 

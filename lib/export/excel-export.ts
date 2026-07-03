@@ -1244,6 +1244,48 @@ function createConflictsByTypeSheet(
 }
 
 // ============================================================================
+// Brand Report Excel Export
+// ============================================================================
+
+export interface BrandReportRow {
+  brand: string;
+  employee: string;
+  hours: number;
+  type: string;
+}
+
+/**
+ * Export brand report to Excel: one sheet, one row per
+ * (brand, employee, project type) with hours summed by the caller
+ * (Brand | Employee | Hours | Type).
+ */
+export async function exportBrandReportToExcel(rows: BrandReportRow[]): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Resource Planner';
+  workbook.created = new Date();
+
+  const worksheet = workbook.addWorksheet('Brand Report', { views: [{ state: 'frozen', ySplit: 1 }] });
+
+  const headerRow = worksheet.addRow(['Brand', 'Employee', 'Hours', 'Type']);
+  applyHeaderStyle(headerRow, HEADER_STYLE);
+
+  const sorted = [...rows].sort(
+    (a, b) => a.brand.localeCompare(b.brand) || a.employee.localeCompare(b.employee),
+  );
+
+  for (const row of sorted) {
+    const dataRow = worksheet.addRow([row.brand, row.employee, row.hours, row.type]);
+    applyRowStyle(dataRow, CELL_STYLE);
+    dataRow.getCell(3).style = NUMBER_CELL_STYLE;
+  }
+
+  setColumnWidths(worksheet, [30, 30, 12, 14]);
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+
+// ============================================================================
 // File Download Utility
 // ============================================================================
 
