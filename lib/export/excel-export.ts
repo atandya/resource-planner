@@ -1281,6 +1281,13 @@ export async function exportBrandReportToExcel(rows: BrandReportRow[]): Promise<
 
   setColumnWidths(worksheet, [30, 30, 12, 14]);
 
+  // Header-row filter dropdowns (Excel AutoFilter; Google Sheets imports it
+  // as an applied filter) so users can sort/filter each column on open.
+  worksheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: worksheet.rowCount, column: 4 },
+  };
+
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);
 }
