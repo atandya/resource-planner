@@ -295,9 +295,16 @@ export function Timeline({
       // Expansion is read non-reactively; measureElement corrects real heights
       // and the expansion subscription below re-measures on toggle.
       const isExpanded = !!id && useTimelineExpansionStore.getState().expandedIds.has(id);
+      // Count only lanes the type scope will render, or scoped views get laid
+      // out at unscoped heights and visibly shrink once measureElement corrects.
+      const lanes = model?.projectLanes ?? [];
+      const laneCount =
+        !projectTypeScope || projectTypeScope === "all"
+          ? lanes.length
+          : lanes.filter((lane) => lane.project.projectType === projectTypeScope).length;
       return getTimelineEstimatedRowHeight({
         isExpanded,
-        laneCount: model?.projectLanes.length ?? 0,
+        laneCount,
         canEditAssignments: canEditAssignmentsRef.current,
       });
     },
@@ -313,6 +320,13 @@ export function Timeline({
       }),
     [rowVirtualizer]
   );
+
+  // A scope switch changes expanded-row heights. Cached measurements would
+  // otherwise win over the scoped estimates for one frame, so drop them and
+  // let the first layout after the switch start from the correct heights.
+  useEffect(() => {
+    rowVirtualizer.measure();
+  }, [projectTypeScope, rowVirtualizer]);
 
   // Skeletons (and the edit lock) engage only while OLD-request data is shown
   // for a NEW request (date/view change). Same-key background refetches —
