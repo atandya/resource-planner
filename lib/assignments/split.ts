@@ -1,4 +1,4 @@
-import { eachMonthOfInterval, format, isValid, startOfDay, startOfMonth } from "date-fns";
+import { eachMonthOfInterval, endOfMonth, format, isValid, startOfDay, startOfMonth } from "date-fns";
 import type { DateRange } from "react-day-picker";
 
 export type MonthHours = { month: string /* yyyy-MM-01 */; plannedHours: number };
@@ -111,12 +111,25 @@ export function countAssignmentWorkingDays(range: { startDate: string; endDate: 
   return countWeekdaysInclusive(parseDateLike(range.startDate), parseDateLike(range.endDate));
 }
 
-/** Default span for enrolling someone on a project: the project's own start/end when
- *  both are known, otherwise today through one month out. */
+/** Default span for enrolling someone on a project: a pitch spans exactly the
+ *  month of its submit date; otherwise the project's own start/end when both
+ *  are known, otherwise today through one month out. */
 export function getDefaultAssignmentRange(
-  project: { startDate?: string | null; endDate?: string | null },
+  project: {
+    startDate?: string | null;
+    endDate?: string | null;
+    projectType?: "pitch" | "campaign";
+    submitDate?: string | null;
+  },
   today: Date = new Date(),
 ): { startDate: string; endDate: string } {
+  if (project.projectType === "pitch" && project.submitDate) {
+    const submitDate = parseDateLike(project.submitDate);
+    return {
+      startDate: format(startOfMonth(submitDate), "yyyy-MM-dd"),
+      endDate: format(endOfMonth(submitDate), "yyyy-MM-dd"),
+    };
+  }
   const startDate = toDateInputValue(project.startDate);
   const endDate = toDateInputValue(project.endDate);
   if (startDate && endDate) return { startDate, endDate };

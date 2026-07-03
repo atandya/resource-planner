@@ -5,6 +5,7 @@ import {
   getMatchingTimelineEmployeeIds,
   hasActiveTimelineScopeFilter,
 } from "@/lib/timeline-v2/timeline-filters";
+import type { TimelineProjectTypeScope } from "@/lib/timeline-v2/types";
 
 type EmployeeNameRecord = {
   fullName?: string | null;
@@ -15,6 +16,7 @@ type TimelineEmployeeFilters = {
   brandIds: string[];
   departments: string[];
   projectIds: string[];
+  projectTypeScope?: TimelineProjectTypeScope;
   searchQuery?: string;
 };
 
@@ -127,7 +129,13 @@ export function filterTimelineEmployees({
 }: TimelineEmployeeFilterInput): Employee[] {
   let filtered = employees;
 
-  if (hasActiveTimelineScopeFilter({ brandIds: filters.brandIds, projectIds: filters.projectIds })) {
+  if (
+    hasActiveTimelineScopeFilter({
+      brandIds: filters.brandIds,
+      projectIds: filters.projectIds,
+      projectTypeScope: filters.projectTypeScope,
+    })
+  ) {
     const matchingEmployeeIds = getMatchingTimelineEmployeeIds({
       dateFilteredAssignments,
       projectByKey,
@@ -135,6 +143,7 @@ export function filterTimelineEmployees({
       filters: {
         brandIds: filters.brandIds,
         projectIds: filters.projectIds,
+        projectTypeScope: filters.projectTypeScope,
       },
     });
 

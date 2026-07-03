@@ -52,11 +52,11 @@ describe("timeline-v2 source parity", () => {
     expect(toolbarSource).not.toContain("setTimeout(");
   });
 
-  it("groups expanded resource rows by campaigns instead of deliverables", () => {
+  it("groups expanded resource rows by project lanes instead of deliverables", () => {
     const source = readFileSync("lib/timeline-v2/row-model.ts", "utf8");
 
     expect(source).toContain("projectLanes");
-    expect(source).toContain("getPlanCampaignProjects");
+    expect(source).toContain("getPlanLaneProjects");
     expect(source).not.toContain("filterTimelineEmployees");
     expect(source).not.toContain("groupProjectsByDeliverable");
     expect(source).not.toContain("extractDeliverables");

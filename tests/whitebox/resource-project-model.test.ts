@@ -84,6 +84,41 @@ describe("resource project model", () => {
     expect(sorted.map((item) => item.id)).toEqual(["project-2", "project-1"]);
   });
 
+  it("sorts pitch projects after campaign projects", () => {
+    const sorted = sortResourceProjects({
+      projects: [
+        project({ id: "pitch-1", projectKey: "pitch:pitch-1", name: "Alpha Pitch", projectType: "pitch" }),
+        project({ id: "project-1", projectKey: "campaign:project-1", name: "Zeta Campaign" }),
+      ],
+      resourceAssignments: [
+        assignment({ id: "a1", projectKey: "pitch:pitch-1" }),
+        assignment({ id: "a2", projectKey: "campaign:project-1" }),
+      ],
+      brandIds: [],
+      days: [new Date("2026-05-18T00:00:00")],
+    });
+
+    expect(sorted.map((item) => item.id)).toEqual(["project-1", "pitch-1"]);
+  });
+
+  it("keeps an explicitly selected pitch ahead of campaigns", () => {
+    const sorted = sortResourceProjects({
+      projects: [
+        project({ id: "project-1", projectKey: "campaign:project-1", name: "Alpha Campaign" }),
+        project({ id: "pitch-1", projectKey: "pitch:pitch-1", name: "Beta Pitch", projectType: "pitch" }),
+      ],
+      resourceAssignments: [
+        assignment({ id: "a1", projectKey: "campaign:project-1" }),
+        assignment({ id: "a2", projectKey: "pitch:pitch-1" }),
+      ],
+      brandIds: [],
+      selectedProjectIds: ["pitch-1"],
+      days: [new Date("2026-05-18T00:00:00")],
+    });
+
+    expect(sorted.map((item) => item.id)).toEqual(["pitch-1", "project-1"]);
+  });
+
   it("sorts the selected project before selected brand matches and other projects", () => {
     const sorted = sortResourceProjects({
       projects: [

@@ -38,6 +38,41 @@ describe("timeline scope filters", () => {
     expect(hasActiveTimelineScopeFilter({ brandIds: [], projectIds: [] })).toBe(false);
     expect(hasActiveTimelineScopeFilter({ brandIds: ["brand-1"], projectIds: [] })).toBe(true);
     expect(hasActiveTimelineScopeFilter({ brandIds: [], projectIds: ["project-1"] })).toBe(true);
+    expect(hasActiveTimelineScopeFilter({ brandIds: [], projectIds: [], projectTypeScope: "all" })).toBe(false);
+    expect(hasActiveTimelineScopeFilter({ brandIds: [], projectIds: [], projectTypeScope: "pitch" })).toBe(true);
+    expect(hasActiveTimelineScopeFilter({ brandIds: [], projectIds: [], projectTypeScope: "campaign" })).toBe(true);
+  });
+
+  it("matches only employees with work of the scoped project type", () => {
+    const employeeIds = getMatchingTimelineEmployeeIds({
+      dateFilteredAssignments: [
+        makeAssignment({ id: "pitch-work", employeeId: "employee-pitch", projectKey: "pitch:pitch-1" }),
+        makeAssignment({ id: "campaign-work", employeeId: "employee-campaign", projectKey: "campaign:project-1" }),
+      ],
+      projectByKey: new Map([
+        ["pitch:pitch-1", makeProject({ id: "pitch-1", projectKey: "pitch:pitch-1", projectType: "pitch" })],
+        ["campaign:project-1", makeProject({})],
+      ]),
+      selectedBrandProjectKeys: new Set(),
+      filters: { brandIds: [], projectIds: [], projectTypeScope: "pitch" },
+    });
+
+    expect(employeeIds).toEqual(new Set(["employee-pitch"]));
+  });
+
+  it("applies no employee restriction when the type scope is all", () => {
+    const employeeIds = getMatchingTimelineEmployeeIds({
+      dateFilteredAssignments: [
+        makeAssignment({ id: "pitch-work", employeeId: "employee-pitch", projectKey: "pitch:pitch-1" }),
+      ],
+      projectByKey: new Map([
+        ["pitch:pitch-1", makeProject({ id: "pitch-1", projectKey: "pitch:pitch-1", projectType: "pitch" })],
+      ]),
+      selectedBrandProjectKeys: new Set(),
+      filters: { brandIds: [], projectIds: [], projectTypeScope: "all" },
+    });
+
+    expect(employeeIds).toBeNull();
   });
 
   it("returns null when no brand or project filter is active", () => {

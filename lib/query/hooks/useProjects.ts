@@ -97,6 +97,8 @@ export type ProjectOption = Pick<
   brandId: string | null;
   brandName?: string | null;
   brandCompanyName?: string | null;
+  /** Pitch submission date; campaigns carry null. */
+  submitDate?: string | null;
 };
 
 export type NewProject = {

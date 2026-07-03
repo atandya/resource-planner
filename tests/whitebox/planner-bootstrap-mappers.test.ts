@@ -61,6 +61,7 @@ describe("planner bootstrap wire mappers", () => {
       "sourceType",
       "startDate",
       "status",
+      "submitDate",
     ]);
   });
 

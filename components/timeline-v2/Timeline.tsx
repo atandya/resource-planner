@@ -9,6 +9,7 @@ import type { ProjectOption } from "@/lib/query/hooks/useProjects";
 import { getResourceRowLoadingState } from "@/lib/timeline-v2/resource-row-loading";
 import { shouldEnableTimelineAssignments, type TimelineAssignmentDateRange } from "@/lib/planner/initial-load";
 import { getTimelineColumns, getTimelineResolution } from "@/lib/timeline-v2/date-range";
+import type { TimelineProjectTypeScope } from "@/lib/timeline-v2/types";
 import { buildEmployeeRowModels } from "@/lib/timeline-v2/row-model";
 import { getVisibleEmployeeIds } from "@/lib/timeline-v2/visible-rows";
 import { useTimelineEmployees } from "@/lib/timeline-v2/use-timeline-employees";
@@ -44,6 +45,7 @@ type TimelineProps = {
   departments: string[];
   searchQuery?: string;
   projectIds: string[];
+  projectTypeScope?: TimelineProjectTypeScope;
 };
 
 function getInitialDate(anchor: string) {
@@ -98,6 +100,7 @@ function toProjectOption(project: PlannerHomeBootstrapResponse["projectsById"][s
     brandId: project.brandId,
     startDate: project.startDate,
     endDate: project.endDate,
+    submitDate: project.submitDate,
   };
 }
 
@@ -108,6 +111,7 @@ export function Timeline({
   departments,
   searchQuery,
   projectIds,
+  projectTypeScope,
 }: TimelineProps) {
   const { session } = useAuth();
   const timelineRootRef = useRef<HTMLDivElement>(null);
@@ -202,8 +206,8 @@ export function Timeline({
   }, [assignmentDateRange, viewMode]);
 
   const timelineFilters = useMemo(
-    () => ({ brandIds, departments, projectIds, searchQuery }),
-    [brandIds, departments, projectIds, searchQuery]
+    () => ({ brandIds, departments, projectIds, projectTypeScope, searchQuery }),
+    [brandIds, departments, projectIds, projectTypeScope, searchQuery]
   );
   // ONE data source: a single windowed bootstrap query. It carries every
   // employee with their assignments for the date window; filters re-slice it
@@ -413,6 +417,7 @@ export function Timeline({
             canEditAssignments={canEditAssignments}
             brandIds={brandIds}
             projectIds={projectIds}
+            projectTypeScope={projectTypeScope}
           />
         </div>
       )}

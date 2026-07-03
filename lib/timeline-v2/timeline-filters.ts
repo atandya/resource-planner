@@ -1,9 +1,11 @@
 import type { Assignment } from "@/lib/query/hooks/useAssignments";
 import type { ProjectOption } from "@/lib/query/hooks/useProjects";
+import type { TimelineProjectType, TimelineProjectTypeScope } from "@/lib/timeline-v2/types";
 
 export type TimelineScopeFilters = {
   brandIds: string[];
   projectIds: string[];
+  projectTypeScope?: TimelineProjectTypeScope;
 };
 
 type TimelineScopeFilterInput = {
@@ -13,8 +15,16 @@ type TimelineScopeFilterInput = {
   filters: TimelineScopeFilters;
 };
 
+function isTypeScopeActive(scope: TimelineProjectTypeScope | undefined): scope is TimelineProjectType {
+  return scope === "campaign" || scope === "pitch";
+}
+
 export function hasActiveTimelineScopeFilter(filters: TimelineScopeFilters): boolean {
-  return filters.brandIds.length > 0 || filters.projectIds.length > 0;
+  return (
+    filters.brandIds.length > 0 ||
+    filters.projectIds.length > 0 ||
+    isTypeScopeActive(filters.projectTypeScope)
+  );
 }
 
 function addEmployeesForProjectKeys({
@@ -106,6 +116,27 @@ function getBrandEmployeeIds({
   return employeeIds;
 }
 
+function getProjectTypeEmployeeIds({
+  projectType,
+  dateFilteredAssignments,
+  projectByKey,
+}: {
+  projectType: TimelineProjectType;
+  dateFilteredAssignments: Assignment[];
+  projectByKey: Map<string, ProjectOption>;
+}): Set<string> {
+  const employeeIds = new Set<string>();
+
+  for (const assignment of dateFilteredAssignments) {
+    if (!assignment.projectKey) continue;
+    if (projectByKey.get(assignment.projectKey)?.projectType === projectType) {
+      employeeIds.add(assignment.employeeId);
+    }
+  }
+
+  return employeeIds;
+}
+
 function intersectEmployeeIds(left: Set<string>, right: Set<string>): Set<string> {
   const result = new Set<string>();
 
@@ -139,6 +170,16 @@ export function getMatchingTimelineEmployeeIds({
     activeMatches.push(
       getProjectEmployeeIds({
         projectIds: filters.projectIds,
+        dateFilteredAssignments,
+        projectByKey,
+      })
+    );
+  }
+
+  if (isTypeScopeActive(filters.projectTypeScope)) {
+    activeMatches.push(
+      getProjectTypeEmployeeIds({
+        projectType: filters.projectTypeScope,
         dateFilteredAssignments,
         projectByKey,
       })

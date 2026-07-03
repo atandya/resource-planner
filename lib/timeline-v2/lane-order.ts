@@ -4,6 +4,7 @@ import {
   isProjectHighlighted,
   sortResourceProjects,
 } from "@/lib/timeline-v2/resource-project-model";
+import type { TimelineProjectTypeScope } from "@/lib/timeline-v2/types";
 
 export type OrderedProjectLane<L> = L & { isHighlighted: boolean };
 
@@ -14,16 +15,25 @@ export function orderProjectLanes<
   resourceAssignments,
   brandIds,
   projectIds,
+  projectTypeScope = "all",
   days,
 }: {
   lanes: L[];
   resourceAssignments: Assignment[];
   brandIds: string[];
   projectIds: string[];
+  projectTypeScope?: TimelineProjectTypeScope;
   days: Date[];
 }): OrderedProjectLane<L>[] {
+  // The type scope hides whole lanes (campaigns-only / pitches-only view);
+  // brand/project filters below only sort and highlight, never hide.
+  const scopedLanes =
+    projectTypeScope === "all"
+      ? lanes
+      : lanes.filter((lane) => lane.project.projectType === projectTypeScope);
+
   const sortedProjects = sortResourceProjects({
-    projects: lanes.map((lane) => lane.project),
+    projects: scopedLanes.map((lane) => lane.project),
     resourceAssignments,
     brandIds,
     selectedProjectIds: projectIds,
@@ -43,7 +53,7 @@ export function orderProjectLanes<
 
   // Stable sort keeps insertion order for ties and for lanes missing from
   // the sorted output (defensive; normally every lane project is present).
-  return [...lanes]
+  return [...scopedLanes]
     .sort(
       (a, b) =>
         (orderByProjectId.get(a.project.id) ?? Number.MAX_SAFE_INTEGER) -
