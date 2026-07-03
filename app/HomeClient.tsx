@@ -38,6 +38,8 @@ import { hasBrandCriteria, hasProjectCriteria } from "@/lib/query/filterCriteria
 import type { ProjectOption } from "@/lib/query/hooks/useProjects";
 import type { Brand } from "@/lib/query/hooks/useBrands";
 import { useFilterPreviewStore } from "@/lib/timeline-v2/filter-preview-store";
+import { useTimelineViewStore } from "@/lib/timeline-v2/view-store";
+import { getTimelineExportDateRange } from "@/lib/timeline-v2/date-range";
 import { countMatchingEmployees } from "@/lib/timeline-v2/count-matching-employees";
 import { DASHBOARD_FEATURE_ENABLED } from "@/lib/dashboard/feature-flag";
 
@@ -97,6 +99,19 @@ export function HomeClient({
   const { session, logout } = useAuth();
   const hasFullAccess = isFullAccess(session);
   const hasDashboardAccess = canAccessDashboard(session);
+
+  // Export defaults follow the timeline's visible range, snapped to whole
+  // months so the export dialog's month-grid picker can represent it.
+  const timelineViewMode = useTimelineViewStore((state) => state.viewMode);
+  const timelineAnchorDate = useTimelineViewStore((state) => state.anchorDate);
+  const timelineCustomRange = useTimelineViewStore((state) => state.customRange);
+  const timelineExportRange = getTimelineExportDateRange({
+    // The store anchor stays null until the user navigates (see Timeline.tsx),
+    // so mirror the timeline's own fallback to the server-provided anchor.
+    anchorDate: timelineAnchorDate ?? new Date(`${initialTimelineAnchor}T00:00:00`),
+    viewMode: timelineViewMode,
+    customRange: timelineCustomRange,
+  });
 
   // APPLIED ids flow to the timeline context; DRAFT objects live inside the
   // FilterPanel until the user hits Apply.
@@ -290,8 +305,8 @@ export function HomeClient({
                 brandId: appliedBrandIds[0] ?? null,
                 departmentId: appliedDepartmentIds[0] ?? null,
                 projectId: appliedProjectIds[0] ?? null,
-                startDate: undefined,
-                endDate: undefined,
+                startDate: timelineExportRange?.startDate,
+                endDate: timelineExportRange?.endDate,
               }}
             />
             {DASHBOARD_FEATURE_ENABLED && hasDashboardAccess && (

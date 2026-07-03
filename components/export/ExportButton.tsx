@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ExportDialog } from "./ExportDialog";
 
-export type ExportType = "assignments" | "utilization" | "projects" | "conflicts";
+export type ExportType = "assignments" | "utilization" | "projects" | "conflicts" | "brand";
 export type ExportFormat = "csv" | "excel";
 
 export type ExportOption = {
@@ -52,6 +52,14 @@ const EXPORT_OPTIONS: ExportOption[] = [
     label: "Conflicts Report",
     icon: "lucide:alert-triangle",
     description: "Export conflict analysis",
+    formats: ["csv", "excel"],
+    requireDateRange: true,
+  },
+  {
+    type: "brand",
+    label: "Brand Report",
+    icon: "lucide:tag",
+    description: "Export brand-level summary",
     formats: ["csv", "excel"],
     requireDateRange: true,
   },

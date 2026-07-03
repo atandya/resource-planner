@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { endOfMonth, format as formatDateFns, startOfMonth } from "date-fns";
 import { Icon } from "@iconify/react";
 import {
   Dialog,
@@ -14,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast, toast } from "@/hooks/use-toast";
+import { CustomRangePicker } from "@/components/timeline-v2/CustomRangePicker";
 import type { ExportOption, ExportFormat } from "./ExportButton";
 import { downloadCsvFile, generateExportFilename } from "@/lib/export/csv-export";
 import { downloadExcelFile, generateExcelFilename } from "@/lib/export/excel-export";
@@ -51,25 +53,20 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     }
   }, [exportOption, format]);
 
-  // Initialize date range
+  // Seed the date range only when the dialog opens. The timeline default
+  // arrives via filters, whose identity changes on every parent render —
+  // re-seeding on those changes would clobber a range the user picked here.
   useEffect(() => {
+    if (!open) return;
     const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    if (exportOption.requireDateRange) {
-      setDateRange({
-        start: filters?.startDate || startOfMonth.toISOString().split('T')[0],
-        end: filters?.endDate || endOfMonth.toISOString().split('T')[0],
-      });
-    } else {
-      // Initialize with current month anyway for consistency
-      setDateRange({
-        start: filters?.startDate || startOfMonth.toISOString().split('T')[0],
-        end: filters?.endDate || endOfMonth.toISOString().split('T')[0],
-      });
-    }
-  }, [exportOption, filters]);
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    setDateRange({
+      start: filters?.startDate || monthStart.toISOString().split('T')[0],
+      end: filters?.endDate || monthEnd.toISOString().split('T')[0],
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   // Estimate record count
   useEffect(() => {
@@ -256,37 +253,31 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           {exportOption.requireDateRange && (
             <div className="space-y-2">
               <Label className="text-sm font-medium">Date Range</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label htmlFor="start-date" className="text-xs text-muted-foreground">
-                    Start Date
-                  </Label>
-                  <input
-                    id="start-date"
-                    type="date"
-                    value={dateRange.start}
-                    onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-                    className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="end-date" className="text-xs text-muted-foreground">
-                    End Date
-                  </Label>
-                  <input
-                    id="end-date"
-                    type="date"
-                    value={dateRange.end}
-                    onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-                    className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
-                  />
-                </div>
-              </div>
-              {dateRange.start && dateRange.end && (
-                <p className="text-xs text-muted-foreground">
-                  {formatDate(dateRange.start)} - {formatDate(dateRange.end)}
-                </p>
-              )}
+              <CustomRangePicker
+                value={
+                  dateRange.start && dateRange.end
+                    ? {
+                        start: startOfMonth(new Date(dateRange.start)),
+                        end: startOfMonth(new Date(dateRange.end)),
+                      }
+                    : null
+                }
+                onApply={(range) =>
+                  setDateRange({
+                    start: formatDateFns(range.start, "yyyy-MM-dd"),
+                    end: formatDateFns(endOfMonth(range.end), "yyyy-MM-dd"),
+                  })
+                }
+              >
+                <Button variant="outline" className="w-full justify-between font-normal">
+                  <span>
+                    {dateRange.start && dateRange.end
+                      ? `${formatDate(dateRange.start)} - ${formatDate(dateRange.end)}`
+                      : "Select date range"}
+                  </span>
+                  <Icon icon="lucide:calendar" className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </CustomRangePicker>
             </div>
           )}
 
