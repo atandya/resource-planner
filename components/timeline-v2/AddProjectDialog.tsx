@@ -213,8 +213,9 @@ export function AddProjectDialog({ createdByUuid: _createdByUuid }: AddProjectDi
             </div>
 
             <div className="rounded-md border">
-              <div className="grid grid-cols-[1fr_2fr] gap-2 border-b bg-muted/30 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="grid grid-cols-[1fr_72px_2fr] gap-2 border-b bg-muted/30 px-3 py-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                 <span>Brand</span>
+                <span>Type</span>
                 <span>Project</span>
               </div>
               <ScrollArea className="h-[320px]">
@@ -231,12 +232,15 @@ export function AddProjectDialog({ createdByUuid: _createdByUuid }: AddProjectDi
                           return (
                             <div
                               key={project.id}
-                              className="grid w-full cursor-not-allowed grid-cols-[1fr_2fr] items-center gap-2 px-3 py-2 text-left text-sm opacity-50"
+                              className="grid w-full cursor-not-allowed grid-cols-[1fr_72px_2fr] items-center gap-2 px-3 py-2 text-left text-sm opacity-50"
                               aria-disabled="true"
                               data-testid="add-project-option-disabled"
                             >
                               <span className="truncate text-xs text-muted-foreground">
                                 {project.brandName ?? "—"}
+                              </span>
+                              <span className="truncate text-xs text-muted-foreground">
+                                {project.projectType === "pitch" ? "Pitch" : "Campaign"}
                               </span>
                               <span className="flex min-w-0 items-center gap-2">
                                 <span
@@ -256,12 +260,15 @@ export function AddProjectDialog({ createdByUuid: _createdByUuid }: AddProjectDi
                           <button
                             key={project.id}
                             type="button"
-                            className="grid w-full grid-cols-[1fr_2fr] items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
+                            className="grid w-full grid-cols-[1fr_72px_2fr] items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent"
                             onClick={() => handlePickProject(project)}
                             data-testid="add-project-option"
                           >
                             <span className="truncate text-xs text-muted-foreground">
                               {project.brandName ?? "—"}
+                            </span>
+                            <span className="truncate text-xs text-muted-foreground">
+                              {project.projectType === "pitch" ? "Pitch" : "Campaign"}
                             </span>
                             <span className="flex min-w-0 items-center gap-2">
                               <span
