@@ -9,7 +9,7 @@ import { TimelineExpandedSkeleton, TimelineRowLoadingCells } from "@/components/
 import { useIsRowExpanded, useTimelineExpansionStore } from "@/lib/timeline-v2/expansion-store";
 import { orderProjectLanes } from "@/lib/timeline-v2/lane-order";
 import type { EmployeeRowModel } from "@/lib/timeline-v2/row-model";
-import type { TimelineColumn, TimelineViewMode } from "@/lib/timeline-v2/types";
+import type { TimelineColumn, TimelineProjectTypeScope, TimelineViewMode } from "@/lib/timeline-v2/types";
 
 type ResourceRowProps = {
   row: EmployeeRowModel;
@@ -20,6 +20,7 @@ type ResourceRowProps = {
   canEditAssignments: boolean;
   brandIds: string[];
   projectIds: string[];
+  projectTypeScope?: TimelineProjectTypeScope;
 };
 
 export const ResourceRow = React.memo(function ResourceRow({
@@ -31,6 +32,7 @@ export const ResourceRow = React.memo(function ResourceRow({
   canEditAssignments,
   brandIds,
   projectIds,
+  projectTypeScope,
 }: ResourceRowProps) {
   const isExpanded = useIsRowExpanded(row.id);
   const toggleExpanded = useTimelineExpansionStore((state) => state.toggle);
@@ -46,10 +48,11 @@ export const ResourceRow = React.memo(function ResourceRow({
             resourceAssignments: row.assignments,
             brandIds,
             projectIds,
+            projectTypeScope,
             days: projectDays,
           })
         : [],
-    [brandIds, isExpanded, projectDays, projectIds, row.assignments, row.projectLanes]
+    [brandIds, isExpanded, projectDays, projectIds, projectTypeScope, row.assignments, row.projectLanes]
   );
 
   // Project IDs (ProjectOption.id) this employee already has lanes for — used

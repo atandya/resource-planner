@@ -24,10 +24,16 @@ export type TimelineColumnSet = {
   columns: TimelineColumn[];
 };
 
+export type TimelineProjectType = "campaign" | "pitch";
+
+/** Which project types the timeline shows: both, campaigns only, or pitches only. */
+export type TimelineProjectTypeScope = "all" | TimelineProjectType;
+
 export type TimelineFilters = {
   brandIds: string[];
   departments: string[];
   projectIds: string[];
+  projectTypeScope?: TimelineProjectTypeScope;
   searchQuery?: string;
 };
 

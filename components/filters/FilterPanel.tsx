@@ -6,15 +6,29 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FilterColumn, type FilterColumnOption } from "@/components/filters/FilterColumn";
 import { FilterChips, type FilterChip } from "@/components/filters/FilterChips";
+import { cn } from "@/lib/utils";
 import type { Brand } from "@/lib/query/hooks/useBrands";
 import type { ProjectOption } from "@/lib/query/hooks/useProjects";
 import type { Department } from "@/lib/query/hooks/useDepartments";
+import type { TimelineProjectTypeScope } from "@/lib/timeline-v2/types";
 
 export type FilterPanelDraft = {
   brands: Brand[];
   projects: ProjectOption[];
   departmentIds: string[];
+  projectTypeScope: TimelineProjectTypeScope;
 };
+
+// The type scope is a view mode, not a match criterion like the columns above:
+// it decides WHICH lanes render (both / campaigns only / pitches only), so it
+// gets its own strip below the table. Exactly one option is always active.
+const PROJECT_TYPE_SCOPE_OPTIONS: Array<{ id: TimelineProjectTypeScope; label: string }> = [
+  { id: "all", label: "All projects" },
+  { id: "campaign", label: "Campaigns only" },
+  { id: "pitch", label: "Pitches only" },
+];
+
+const PROJECT_TYPE_SCOPE_LABELS = new Map(PROJECT_TYPE_SCOPE_OPTIONS.map((o) => [o.id, o.label]));
 
 type ColumnFeed = {
   options: FilterColumnOption[];
@@ -41,6 +55,7 @@ type FilterPanelProps = {
   onToggleBrand: (id: string, checked: boolean) => void;
   onToggleProject: (id: string, checked: boolean) => void;
   onToggleDepartment: (id: string, checked: boolean) => void;
+  onProjectTypeScopeChange: (scope: TimelineProjectTypeScope) => void;
   onRemoveBrand: (id: string) => void;
   onRemoveProject: (id: string) => void;
   onRemoveDepartment: (id: string) => void;
@@ -55,6 +70,13 @@ export function FilterPanel(props: FilterPanelProps) {
   const chips: FilterChip[] = [
     ...draft.brands.map((b) => ({ key: `brand:${b.id}`, label: b.name, onRemove: () => props.onRemoveBrand(b.id) })),
     ...draft.projects.map((p) => ({ key: `project:${p.id}`, label: p.name, onRemove: () => props.onRemoveProject(p.id) })),
+    ...(draft.projectTypeScope !== "all"
+      ? [{
+          key: `type-scope:${draft.projectTypeScope}`,
+          label: PROJECT_TYPE_SCOPE_LABELS.get(draft.projectTypeScope) ?? draft.projectTypeScope,
+          onRemove: () => props.onProjectTypeScopeChange("all"),
+        }]
+      : []),
     ...draft.departmentIds.map((id) => ({ key: `dept:${id}`, label: departmentById.get(id)?.name ?? id, onRemove: () => props.onRemoveDepartment(id) })),
   ];
 
@@ -117,6 +139,31 @@ export function FilterPanel(props: FilterPanelProps) {
                 onToggle={props.onToggleDepartment} search={null} hasQuery
               />
             </div>
+          </div>
+
+          <div className="flex items-center gap-3 border-t px-3 py-2" data-testid="filter-project-type-scope">
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Show</span>
+            <div className="flex gap-0.5 rounded-md border bg-muted/30 p-0.5" role="group" aria-label="Project type scope">
+              {PROJECT_TYPE_SCOPE_OPTIONS.map((option) => {
+                const active = draft.projectTypeScope === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-pressed={active}
+                    className={cn(
+                      "h-7 rounded-sm px-2.5 text-[12px] transition-colors",
+                      active ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:bg-accent"
+                    )}
+                    onClick={() => props.onProjectTypeScopeChange(option.id)}
+                    data-testid={`filter-project-type-scope-${option.id}`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+            <span className="text-[11px] text-muted-foreground/70">Controls which project lanes appear on the timeline</span>
           </div>
 
           <div className="flex items-center justify-between gap-2 border-t bg-secondary p-2.5">

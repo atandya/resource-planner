@@ -124,6 +124,37 @@ describe("timeline-v2 row model", () => {
     expect(model.projectLanes[0].brand?.name).toBe("Brand One");
   });
 
+  it("builds lanes for pitch projects alongside campaigns", () => {
+    const pitchProject: ProjectOption = {
+      id: "pitch-1",
+      projectKey: "pitch:pitch-1",
+      name: "Pitch One",
+      color: "#f59e0b",
+      status: "active",
+      projectType: "pitch",
+      brandId: "brand-1",
+      startDate: null,
+      endDate: null,
+    };
+
+    const models = buildEmployeeRowModels({
+      employees: [employee("employee-1", "Ada Lovelace")],
+      assignments: [
+        assignment({ id: "plan-1", employeeId: "employee-1", projectKey: "campaign:project-1" }),
+        assignment({ id: "plan-2", employeeId: "employee-1", projectKey: "pitch:pitch-1" }),
+      ],
+      projects: [project("project-1"), pitchProject],
+      brandById,
+      days: dateRange(1, 18),
+      viewMode: "month",
+    });
+
+    const lanes = models.get("employee-1")?.projectLanes ?? [];
+    expect(lanes.map((lane) => lane.projectKey)).toEqual(["campaign:project-1", "pitch:pitch-1"]);
+    expect(lanes[1].project.projectType).toBe("pitch");
+    expect(lanes[1].planDisplaySegments.length).toBeGreaterThan(0);
+  });
+
   it("keeps lanes in assignment insertion order without highlight flags", () => {
     const models = buildEmployeeRowModels({
       employees: [employee("employee-1", "Ada Lovelace")],

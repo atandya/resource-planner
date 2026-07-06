@@ -37,7 +37,7 @@ export type MinimalTimelineEmployee = Pick<
 // the payload (payload-diet spec 2026-06-12).
 export type BootstrapProject = Pick<
   PlannerDirectoryProjectRow,
-  "sourceProjectId" | "name" | "color" | "status" | "sourceType" | "brandId" | "startDate" | "endDate"
+  "sourceProjectId" | "name" | "color" | "status" | "sourceType" | "brandId" | "startDate" | "endDate" | "submitDate"
 >;
 export type BootstrapBrand = Pick<
   PlannerDirectoryBrandRow,
@@ -55,6 +55,7 @@ export function toBootstrapProject(row: PlannerDirectoryProjectRow): BootstrapPr
     brandId: row.brandId,
     startDate: row.startDate,
     endDate: row.endDate,
+    submitDate: row.submitDate,
   };
 }
 

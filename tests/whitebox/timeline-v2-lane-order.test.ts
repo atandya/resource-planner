@@ -144,6 +144,44 @@ describe("timeline-v2 lane order", () => {
     expect(ordered.every((item) => item.isHighlighted === false)).toBe(true);
   });
 
+  it("hides lanes outside the project type scope", () => {
+    const pitchProject: ProjectOption = { ...project("pitch-a"), projectType: "pitch" };
+    const lanes = [
+      lane(project("project-a", "brand-1")),
+      lane(pitchProject),
+    ];
+
+    const pitchOnly = orderProjectLanes({
+      lanes,
+      resourceAssignments: [],
+      brandIds: [],
+      projectIds: [],
+      projectTypeScope: "pitch",
+      days: dateRange(1, 5),
+    });
+    expect(pitchOnly.map((item) => item.project.id)).toEqual(["pitch-a"]);
+
+    const campaignOnly = orderProjectLanes({
+      lanes,
+      resourceAssignments: [],
+      brandIds: [],
+      projectIds: [],
+      projectTypeScope: "campaign",
+      days: dateRange(1, 5),
+    });
+    expect(campaignOnly.map((item) => item.project.id)).toEqual(["project-a"]);
+
+    const both = orderProjectLanes({
+      lanes,
+      resourceAssignments: [],
+      brandIds: [],
+      projectIds: [],
+      projectTypeScope: "all",
+      days: dateRange(1, 5),
+    });
+    expect(both.map((item) => item.project.id)).toEqual(["project-a", "pitch-a"]);
+  });
+
   it("preserves lane payload fields alongside the highlight flag", () => {
     const ordered = orderProjectLanes({
       lanes: [

@@ -4,7 +4,7 @@ import React from "react";
 import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
 import { ResourceRow } from "@/components/timeline-v2/ResourceRow";
 import type { EmployeeRowModel } from "@/lib/timeline-v2/row-model";
-import type { TimelineColumn, TimelineViewMode } from "@/lib/timeline-v2/types";
+import type { TimelineColumn, TimelineProjectTypeScope, TimelineViewMode } from "@/lib/timeline-v2/types";
 
 type TimelineBodyProps = {
   rowVirtualizer: Virtualizer<HTMLDivElement, Element>;
@@ -18,6 +18,7 @@ type TimelineBodyProps = {
   canEditAssignments: boolean;
   brandIds: string[];
   projectIds: string[];
+  projectTypeScope?: TimelineProjectTypeScope;
 };
 
 // Virtualized rows region. Lives inside the single scroll container owned by
@@ -35,6 +36,7 @@ export function TimelineBody({
   canEditAssignments,
   brandIds,
   projectIds,
+  projectTypeScope,
 }: TimelineBodyProps) {
   return (
     <div className="relative w-full" style={{ height: `${rowVirtualizer.getTotalSize()}px` }}>
@@ -60,6 +62,7 @@ export function TimelineBody({
               canEditAssignments={canEditAssignments}
               brandIds={brandIds}
               projectIds={projectIds}
+              projectTypeScope={projectTypeScope}
             />
           </div>
         );
