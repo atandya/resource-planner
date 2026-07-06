@@ -27,6 +27,7 @@ function toProjectOption(project: Awaited<ReturnType<typeof plannerDirectoryRepo
     projectType: project.sourceType,
     startDate: project.startDate,
     endDate: project.endDate,
+    submitDate: project.submitDate,
   };
 }
 

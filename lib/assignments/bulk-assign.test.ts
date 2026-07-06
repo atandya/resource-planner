@@ -13,13 +13,14 @@ describe("deriveProjectSpan", () => {
     expect(deriveProjectSpan({ projectType: "campaign", startDate: null, endDate: null })).toBeNull();
   });
 
-  it("uses startDate as a single-day span for a pitch", () => {
+  it("spans the full submit month for a pitch (same as the single-assign default)", () => {
     expect(
-      deriveProjectSpan({ projectType: "pitch", startDate: "2026-05-10", endDate: null }),
-    ).toEqual({ startDate: "2026-05-10", endDate: "2026-05-10" });
+      deriveProjectSpan({ projectType: "pitch", startDate: null, endDate: null, submitDate: "2026-05-10" }),
+    ).toEqual({ startDate: "2026-05-01", endDate: "2026-05-31" });
   });
 
-  it("returns null for a pitch with no startDate", () => {
+  it("returns null for a pitch with no submitDate, even when startDate is set", () => {
+    expect(deriveProjectSpan({ projectType: "pitch", startDate: "2026-05-10", endDate: null })).toBeNull();
     expect(deriveProjectSpan({ projectType: "pitch", startDate: null, endDate: null })).toBeNull();
   });
 
@@ -175,30 +176,44 @@ describe("buildBulkAssignOperations", () => {
   });
 });
 
-describe("pitch exclusion", () => {
-  const pitch = { projectKey: "pitch:1", projectType: "pitch" as const, startDate: "2026-05-10", endDate: null };
+describe("pitch bulk-assign", () => {
+  const pitch = { projectKey: "pitch:1", projectType: "pitch" as const, startDate: null, endDate: null, submitDate: "2026-05-10" };
+  const undatedPitch = { projectKey: "pitch:2", projectType: "pitch" as const, startDate: "2026-05-10", endDate: null, submitDate: null };
   const campaign = { projectKey: "campaign:1", projectType: "campaign" as const, startDate: "2026-04-01", endDate: "2026-06-30" };
 
-  it("isAssignableProject is false for a pitch even when it has a startDate", () => {
-    expect(isAssignableProject(pitch)).toBe(false);
+  it("isAssignableProject is true for a pitch with a submitDate, false without", () => {
+    expect(isAssignableProject(pitch)).toBe(true);
+    expect(isAssignableProject(undatedPitch)).toBe(false);
     expect(isAssignableProject(campaign)).toBe(true);
   });
 
-  it("buildBulkAssignOperations skips pitches", () => {
+  it("buildBulkAssignOperations plans a pitch across its submit month", () => {
     const ops = buildBulkAssignOperations({
       members: [{ id: "m1" }],
       projects: [pitch, campaign],
+      hoursByMember: { m1: "30" },
+    });
+    expect(ops).toHaveLength(2);
+    expect(ops[0].projectKey).toBe("pitch:1");
+    expect(ops[0].span).toEqual({ startDate: "2026-05-01", endDate: "2026-05-31" });
+    expect(ops[0].monthlyHours).toEqual({ "2026-05-01": 30 });
+  });
+
+  it("buildBulkAssignOperations skips a pitch with no submitDate", () => {
+    const ops = buildBulkAssignOperations({
+      members: [{ id: "m1" }],
+      projects: [undatedPitch, campaign],
       hoursByMember: { m1: "30" },
     });
     expect(ops).toHaveLength(1);
     expect(ops[0].projectKey).toBe("campaign:1");
   });
 
-  it("summarizeBulkAssign counts a pitch as skipped, not assignable", () => {
-    expect(summarizeBulkAssign(1, [pitch, campaign])).toEqual({
-      assignableProjectCount: 1,
+  it("summarizeBulkAssign counts a dated pitch as assignable and an undated one as skipped", () => {
+    expect(summarizeBulkAssign(1, [pitch, undatedPitch, campaign])).toEqual({
+      assignableProjectCount: 2,
       skippedCount: 1,
-      totalAssignments: 1,
+      totalAssignments: 2,
     });
   });
 });

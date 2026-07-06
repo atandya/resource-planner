@@ -11,6 +11,7 @@ import { shouldEnableTimelineAssignments, type TimelineAssignmentDateRange } fro
 import { getTimelineColumns, getTimelineResolution } from "@/lib/timeline-v2/date-range";
 import type { TimelineProjectTypeScope } from "@/lib/timeline-v2/types";
 import { buildEmployeeRowModels } from "@/lib/timeline-v2/row-model";
+import { scopeProjectLanes } from "@/lib/timeline-v2/lane-order";
 import { getVisibleEmployeeIds } from "@/lib/timeline-v2/visible-rows";
 import { useTimelineEmployees } from "@/lib/timeline-v2/use-timeline-employees";
 import { useTimelineExpansionStore } from "@/lib/timeline-v2/expansion-store";
@@ -297,11 +298,7 @@ export function Timeline({
       const isExpanded = !!id && useTimelineExpansionStore.getState().expandedIds.has(id);
       // Count only lanes the type scope will render, or scoped views get laid
       // out at unscoped heights and visibly shrink once measureElement corrects.
-      const lanes = model?.projectLanes ?? [];
-      const laneCount =
-        !projectTypeScope || projectTypeScope === "all"
-          ? lanes.length
-          : lanes.filter((lane) => lane.project.projectType === projectTypeScope).length;
+      const laneCount = scopeProjectLanes(model?.projectLanes ?? [], projectTypeScope).length;
       return getTimelineEstimatedRowHeight({
         isExpanded,
         laneCount,

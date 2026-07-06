@@ -241,40 +241,36 @@ export const BulkAssignDialog: React.FC<BulkAssignDialogProps> = ({
                   <div className="md:flex-1 md:overflow-y-auto space-y-1 pr-1">
                     {filteredProjects.map((p) => {
                       const isSelected = selectedProjectIds.has(p.id);
-                      const blocked = p.projectType === "pitch";
+                      const isPitch = p.projectType === "pitch";
                       const span = deriveProjectSpan(p);
-                      const noDate = !span && !blocked;
-                      const RowTag = blocked ? "div" : "label";
+                      const noDate = !span;
                       return (
-                        <RowTag
+                        <label
                           key={p.id}
                           className={cn(
-                            "flex items-center gap-3 p-3 rounded-lg border transition-colors",
-                            blocked
-                              ? "border-dashed border-muted bg-muted/20 opacity-60 cursor-not-allowed"
-                              : isSelected
-                                ? "bg-primary/5 border-primary cursor-pointer"
-                                : noDate
-                                  ? "border-amber-200 bg-amber-50/50 opacity-70 cursor-pointer"
-                                  : "hover:bg-accent/50 border-transparent cursor-pointer",
+                            "flex items-center gap-3 p-3 rounded-lg border transition-colors cursor-pointer",
+                            isSelected
+                              ? "bg-primary/5 border-primary"
+                              : noDate
+                                ? "border-amber-200 bg-amber-50/50 opacity-70"
+                                : "hover:bg-accent/50 border-transparent",
                           )}
                         >
                           <div className="w-2 h-6 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
                           <div className="flex-1 min-w-0">
                             <div className="font-medium text-sm truncate">{p.name}</div>
                             <div className="text-xs text-muted-foreground">
-                              {blocked
-                                ? "Pitch · can't be planned on the timeline yet"
+                              {isPitch
+                                ? `Pitch${span ? ` · ${span.startDate} – ${span.endDate}` : " · no submit date — will be skipped"}`
                                 : `Campaign${span ? ` · ${span.startDate} – ${span.endDate}` : " · no dates — will be skipped"}`}
                             </div>
                           </div>
                           <Checkbox
                             checked={isSelected}
-                            disabled={blocked}
                             onCheckedChange={() => toggleProject(p.id)}
-                            aria-label={blocked ? `${p.name} — pitches can't be planned yet` : `Select project ${p.name}`}
+                            aria-label={`Select project ${p.name}`}
                           />
-                        </RowTag>
+                        </label>
                       );
                     })}
                   </div>

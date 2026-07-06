@@ -111,6 +111,17 @@ export function countAssignmentWorkingDays(range: { startDate: string; endDate: 
   return countWeekdaysInclusive(parseDateLike(range.startDate), parseDateLike(range.endDate));
 }
 
+/** The canonical span for planning a pitch: the full calendar month of its
+ *  submit date. Shared by single-assign defaults and bulk-assign so the two
+ *  paths can't drift. */
+export function getPitchSubmitMonthSpan(submitDate: string | Date): { startDate: string; endDate: string } {
+  const d = parseDateLike(submitDate instanceof Date ? submitDate : String(submitDate));
+  return {
+    startDate: format(startOfMonth(d), "yyyy-MM-dd"),
+    endDate: format(endOfMonth(d), "yyyy-MM-dd"),
+  };
+}
+
 /** Default span for enrolling someone on a project: a pitch spans exactly the
  *  month of its submit date; otherwise the project's own start/end when both
  *  are known, otherwise today through one month out. */
@@ -124,11 +135,7 @@ export function getDefaultAssignmentRange(
   today: Date = new Date(),
 ): { startDate: string; endDate: string } {
   if (project.projectType === "pitch" && project.submitDate) {
-    const submitDate = parseDateLike(project.submitDate);
-    return {
-      startDate: format(startOfMonth(submitDate), "yyyy-MM-dd"),
-      endDate: format(endOfMonth(submitDate), "yyyy-MM-dd"),
-    };
+    return getPitchSubmitMonthSpan(project.submitDate);
   }
   const startDate = toDateInputValue(project.startDate);
   const endDate = toDateInputValue(project.endDate);

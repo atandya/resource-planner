@@ -8,6 +8,18 @@ import type { TimelineProjectTypeScope } from "@/lib/timeline-v2/types";
 
 export type OrderedProjectLane<L> = L & { isHighlighted: boolean };
 
+/** Lanes that survive the project-type scope. Shared by the render path
+ *  (orderProjectLanes) and the virtualizer's row-height estimate so the two
+ *  models can't drift — if they disagreed, scoped rows would lay out at one
+ *  height and visibly shrink when measureElement corrects them. */
+export function scopeProjectLanes<L extends { project: ProjectOption }>(
+  lanes: L[],
+  projectTypeScope: TimelineProjectTypeScope = "all",
+): L[] {
+  if (projectTypeScope === "all") return lanes;
+  return lanes.filter((lane) => lane.project.projectType === projectTypeScope);
+}
+
 export function orderProjectLanes<
   L extends { project: ProjectOption; planAssignments: Assignment[] }
 >({
@@ -27,10 +39,7 @@ export function orderProjectLanes<
 }): OrderedProjectLane<L>[] {
   // The type scope hides whole lanes (campaigns-only / pitches-only view);
   // brand/project filters below only sort and highlight, never hide.
-  const scopedLanes =
-    projectTypeScope === "all"
-      ? lanes
-      : lanes.filter((lane) => lane.project.projectType === projectTypeScope);
+  const scopedLanes = scopeProjectLanes(lanes, projectTypeScope);
 
   const sortedProjects = sortResourceProjects({
     projects: scopedLanes.map((lane) => lane.project),
