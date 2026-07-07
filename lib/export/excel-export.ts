@@ -6,6 +6,7 @@
 import ExcelJS from 'exceljs';
 import { ResourceCapacityAnalysis } from '@/lib/analysis/types';
 import type { ProjectExportData } from './csv-export';
+import type { BrandReportRow } from './brand-report';
 
 // ============================================================================
 // Excel Styling Constants
@@ -1247,17 +1248,12 @@ function createConflictsByTypeSheet(
 // Brand Report Excel Export
 // ============================================================================
 
-export interface BrandReportRow {
-  brand: string;
-  employee: string;
-  hours: number;
-  type: string;
-}
-
 /**
- * Export brand report to Excel: one sheet, one row per
- * (brand, employee, project type) with hours summed by the caller
- * (Brand | Employee | Hours | Type).
+ * Export brand report to Excel: one sheet, one row per (brand, employee) with
+ * man-hours split across project types
+ * (Brand | Employee | Campaign Hours | Pitch Hours | [Other Hours] | Total Hours).
+ * The Other Hours column appears only when some hours come from an unresolved
+ * project type. Rows are expected pre-sorted and pre-rounded by the caller.
  */
 export async function exportBrandReportToExcel(rows: BrandReportRow[]): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
@@ -1266,26 +1262,36 @@ export async function exportBrandReportToExcel(rows: BrandReportRow[]): Promise<
 
   const worksheet = workbook.addWorksheet('Brand Report', { views: [{ state: 'frozen', ySplit: 1 }] });
 
-  const headerRow = worksheet.addRow(['Brand', 'Employee', 'Hours', 'Type']);
+  const includeOther = rows.some((r) => r.otherHours > 0);
+
+  const headers = includeOther
+    ? ['Brand', 'Employee', 'Campaign Hours', 'Pitch Hours', 'Other Hours', 'Total Hours']
+    : ['Brand', 'Employee', 'Campaign Hours', 'Pitch Hours', 'Total Hours'];
+  const headerRow = worksheet.addRow(headers);
   applyHeaderStyle(headerRow, HEADER_STYLE);
 
-  const sorted = [...rows].sort(
-    (a, b) => a.brand.localeCompare(b.brand) || a.employee.localeCompare(b.employee),
-  );
+  const hoursStyle = { ...NUMBER_CELL_STYLE, numFmt: '#,##0.0' };
 
-  for (const row of sorted) {
-    const dataRow = worksheet.addRow([row.brand, row.employee, row.hours, row.type]);
+  for (const row of rows) {
+    const values = includeOther
+      ? [row.brand, row.employee, row.campaignHours, row.pitchHours, row.otherHours, row.totalHours]
+      : [row.brand, row.employee, row.campaignHours, row.pitchHours, row.totalHours];
+    const dataRow = worksheet.addRow(values);
     applyRowStyle(dataRow, CELL_STYLE);
-    dataRow.getCell(3).style = NUMBER_CELL_STYLE;
+    // Numeric hour columns start at column 3.
+    for (let col = 3; col <= values.length; col++) {
+      dataRow.getCell(col).style = hoursStyle;
+    }
   }
 
-  setColumnWidths(worksheet, [30, 30, 12, 14]);
+  const lastColumn = includeOther ? 6 : 5;
+  setColumnWidths(worksheet, includeOther ? [30, 30, 15, 13, 13, 13] : [30, 30, 15, 13, 13]);
 
-  // Header-row filter dropdowns (Excel AutoFilter; Google Sheets imports it
-  // as an applied filter) so users can sort/filter each column on open.
+  // Header-row filter dropdowns (Excel AutoFilter; Google Sheets imports it as
+  // an applied filter) so users can sort/filter each column on open.
   worksheet.autoFilter = {
     from: { row: 1, column: 1 },
-    to: { row: worksheet.rowCount, column: 4 },
+    to: { row: worksheet.rowCount, column: lastColumn },
   };
 
   const buffer = await workbook.xlsx.writeBuffer();
