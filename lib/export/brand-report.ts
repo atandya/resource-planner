@@ -93,8 +93,8 @@ export function buildBrandReportRows(input: BrandReportInput): BrandReportRow[] 
       continue;
     }
     // project_key is "<sourceType>:<id>", so the prefix is the fallback.
-    const type = project?.sourceType || engagement.project_key.split(":")[0] || "unknown";
-    const brandId = project?.brandId || "unknown";
+    const type = project?.sourceType || engagement.project_key.split(':')[0] || 'unknown';
+    const brandId = project?.brandId || 'unknown';
     const key = `${brandId}|${engagement.employee_uuid}`;
     const hours = hoursByAssignment.get(engagement.assignment_uuid) || 0;
 
@@ -104,8 +104,8 @@ export function buildBrandReportRows(input: BrandReportInput): BrandReportRow[] 
         brand:
           (project?.brandId && brandNameById.get(project.brandId)) ||
           project?.brandName ||
-          "Unknown Brand",
-        employee: employeeByUuid.get(engagement.employee_uuid)?.fullName || "Unknown Employee",
+          'Unknown Brand',
+        employee: employeeByUuid.get(engagement.employee_uuid)?.fullName || 'Unknown Employee',
         campaignHours: 0,
         pitchHours: 0,
         otherHours: 0,
@@ -113,23 +113,19 @@ export function buildBrandReportRows(input: BrandReportInput): BrandReportRow[] 
       buckets.set(key, bucket);
     }
 
-    if (type === "campaign") bucket.campaignHours += hours;
-    else if (type === "pitch") bucket.pitchHours += hours;
+    if (type === 'campaign') bucket.campaignHours += hours;
+    else if (type === 'pitch') bucket.pitchHours += hours;
     else bucket.otherHours += hours;
   }
 
   const rows: BrandReportRow[] = [];
   for (const bucket of buckets.values()) {
-    const total = bucket.campaignHours + bucket.pitchHours + bucket.otherHours;
-    if (total === 0) continue; // drop employees with no hours in range
-    rows.push({
-      brand: bucket.brand,
-      employee: bucket.employee,
-      campaignHours: round1(bucket.campaignHours),
-      pitchHours: round1(bucket.pitchHours),
-      otherHours: round1(bucket.otherHours),
-      totalHours: round1(total),
-    });
+    const campaignHours = round1(bucket.campaignHours);
+    const pitchHours = round1(bucket.pitchHours);
+    const otherHours = round1(bucket.otherHours);
+    const totalHours = round1(campaignHours + pitchHours + otherHours);
+    if (totalHours === 0) continue; // drop employees with no hours in range
+    rows.push({ brand: bucket.brand, employee: bucket.employee, campaignHours, pitchHours, otherHours, totalHours });
   }
 
   rows.sort((a, b) => a.brand.localeCompare(b.brand) || a.employee.localeCompare(b.employee));
