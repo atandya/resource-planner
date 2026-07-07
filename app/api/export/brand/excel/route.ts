@@ -2,19 +2,18 @@
  * Export Brand Report Excel API Route
  * GET /api/export/brand/excel
  *
- * One row per (brand, employee, project type): Brand | Employee | Hours | Type.
- * Hours are the summed monthly planned allocations clipped to the requested
- * date range; Type is the project's source type (campaign/pitch).
+ * One row per (brand, employee): Brand | Employee | Campaign Hours |
+ * Pitch Hours | [Other Hours] | Total Hours. Hours are the summed monthly
+ * planned allocations clipped to the requested date range, split by the
+ * project's source type (campaign/pitch/other). Projects are disregarded —
+ * an employee's hours across all of a brand's projects of a given type are summed.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
 import { getExportMetadata } from '@/lib/export/permissions';
-import {
-  exportBrandReportToExcel,
-  generateExcelFilename,
-  type BrandReportRow,
-} from '@/lib/export/excel-export';
+import { exportBrandReportToExcel, generateExcelFilename } from '@/lib/export/excel-export';
+import { buildBrandReportRows } from '@/lib/export/brand-report';
 import { hasFullAccess, getCurrentEmployeeUUID } from '@/lib/export/data-fetcher';
 import { getEngagements } from '@/lib/assignments/assignment-reads';
 import { plannerDirectoryRepository } from '@/lib/planner-directory/repository';
@@ -56,54 +55,14 @@ export async function GET(request: NextRequest) {
       plannerDirectoryRepository.listBrands(),
     ]);
 
-    const projectByKey = new Map(projects.map((p) => [p.projectKey, p]));
-    const employeeByUuid = new Map(employees.map((e) => [e.employeeUuid, e]));
-    // listProjects() reads planner_projects directly, where brand_name is not
-    // stored (it comes from a JOIN elsewhere) — resolve names via brands.
-    const brandNameById = new Map(brands.map((b) => [b.brandId, b.name]));
-
-    const hoursByAssignment = new Map<string, number>();
-    for (const alloc of allocations) {
-      hoursByAssignment.set(
-        alloc.assignment_uuid,
-        (hoursByAssignment.get(alloc.assignment_uuid) || 0) + (Number(alloc.planned_hours) || 0)
-      );
-    }
-
-    const brandIdFilter = brandIds ? new Set(brandIds.split(',')) : null;
-
-    // Aggregate hours per (brand, employee, project type). Brands are keyed by
-    // id where available so two distinct brands sharing a name don't merge.
-    const aggregated = new Map<string, BrandReportRow>();
-    for (const engagement of engagements) {
-      const project = projectByKey.get(engagement.project_key);
-      if (brandIdFilter && (!project?.brandId || !brandIdFilter.has(project.brandId))) {
-        continue;
-      }
-      // project_key is "<sourceType>:<id>", so the prefix is the fallback
-      const type = project?.sourceType || engagement.project_key.split(':')[0] || 'unknown';
-      const key = `${project?.brandId || 'unknown'}|${engagement.employee_uuid}|${type}`;
-      const hours = hoursByAssignment.get(engagement.assignment_uuid) || 0;
-      const existing = aggregated.get(key);
-      if (existing) {
-        existing.hours += hours;
-      } else {
-        aggregated.set(key, {
-          brand:
-            (project?.brandId && brandNameById.get(project.brandId)) ||
-            project?.brandName ||
-            'Unknown Brand',
-          employee:
-            employeeByUuid.get(engagement.employee_uuid)?.fullName || 'Unknown Employee',
-          hours,
-          type,
-        });
-      }
-    }
-    const rows = [...aggregated.values()].map((row) => ({
-      ...row,
-      hours: Math.round(row.hours * 10) / 10,
-    }));
+    const rows = buildBrandReportRows({
+      engagements,
+      allocations,
+      projects,
+      employees,
+      brands,
+      brandIdFilter: brandIds ? brandIds.split(',') : null,
+    });
 
     console.log('[Export Brand Excel] Engagements:', engagements.length, 'rows:', rows.length);
 
