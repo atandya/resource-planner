@@ -41,4 +41,23 @@ describe('exportBrandReportToExcel', () => {
     ]);
     expect(sheet[1]).toEqual(['BAF', 'Andi', '10', '0', '5', '15']);
   });
+
+  it('produces a header-only sheet with a valid filter range when there are no rows', async () => {
+    const sheet = await readSheet(await exportBrandReportToExcel([]));
+    expect(sheet).toEqual([['Brand', 'Employee', 'Campaign Hours', 'Pitch Hours', 'Total Hours']]);
+  });
+
+  it('renders multiple rows in the order given by the caller', async () => {
+    const rows: BrandReportRow[] = [
+      { brand: 'BAF', employee: 'Andi', campaignHours: 10, pitchHours: 0, otherHours: 0, totalHours: 10 },
+      { brand: 'BAF', employee: 'Siti', campaignHours: 20, pitchHours: 5, otherHours: 0, totalHours: 25 },
+      { brand: 'Pegadaian', employee: 'Andi', campaignHours: 40, pitchHours: 0, otherHours: 0, totalHours: 40 },
+    ];
+    const sheet = await readSheet(await exportBrandReportToExcel(rows));
+    expect(sheet.slice(1)).toEqual([
+      ['BAF', 'Andi', '10', '0', '10'],
+      ['BAF', 'Siti', '20', '5', '25'],
+      ['Pegadaian', 'Andi', '40', '0', '40'],
+    ]);
+  });
 });

@@ -1270,6 +1270,8 @@ export async function exportBrandReportToExcel(rows: BrandReportRow[]): Promise<
   const headerRow = worksheet.addRow(headers);
   applyHeaderStyle(headerRow, HEADER_STYLE);
 
+  // Brand Report hours are rounded to 1 decimal upstream (buildBrandReportRows),
+  // so this sheet formats to 1 decimal instead of the file-wide 2-decimal default.
   const hoursStyle = { ...NUMBER_CELL_STYLE, numFmt: '#,##0.0' };
 
   for (const row of rows) {
