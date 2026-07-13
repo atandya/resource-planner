@@ -537,4 +537,34 @@ describe("planner directory repository", () => {
     expect(capturedParams).toContain("b1");
     expect(capturedParams).toContain("b2");
   });
+
+  it("archives a single brand by its source uuid without deleting the row", async () => {
+    const db = createMockDb();
+    const repository = createPlannerDirectoryRepository({ db });
+
+    await repository.archiveBrandBySourceUuid("brand-uuid-1", "2026-07-13T10:00:00.000Z");
+
+    expect(db.query).toHaveBeenCalledWith(
+      expect.stringContaining("UPDATE planner_brands SET archived_at"),
+      ["2026-07-13T10:00:00.000Z", "brand-uuid-1"]
+    );
+    expect(String(db.query.mock.calls[0]?.[0])).toContain("WHERE source_uuid");
+    expect(String(db.query.mock.calls[0]?.[0])).not.toMatch(/DELETE/i);
+  });
+
+  it("archives a single project by its source type and uuid without deleting the row", async () => {
+    const db = createMockDb();
+    const repository = createPlannerDirectoryRepository({ db });
+
+    await repository.archiveProjectBySource("pitch", "pitch-uuid-1", "2026-07-13T10:00:00.000Z");
+
+    expect(db.query).toHaveBeenCalledWith(
+      expect.stringContaining("UPDATE planner_projects SET archived_at"),
+      ["2026-07-13T10:00:00.000Z", "pitch", "pitch-uuid-1"]
+    );
+    const sql = String(db.query.mock.calls[0]?.[0]);
+    expect(sql).toContain("WHERE source_type");
+    expect(sql).toContain("source_project_id");
+    expect(sql).not.toMatch(/DELETE/i);
+  });
 });

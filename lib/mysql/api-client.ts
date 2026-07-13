@@ -299,8 +299,9 @@ class MySqlApiClient {
           originalError: error,
         };
 
+        const status = error instanceof MySqlApiError ? error.statusCode : 500;
         return {
-          status: 500,
+          status,
           success: false,
           message: `Request failed: ${enhancedError.message}`,
           error: enhancedError,

@@ -5,6 +5,7 @@ import type {
   PlannerDirectoryEmployeeRow,
   PlannerDirectoryIssueSeverity,
   PlannerDirectoryProjectRow,
+  PlannerDirectorySourceType,
   PlannerDirectorySyncIssue,
   PlannerDirectorySyncRun,
   PlannerSyncMode,
@@ -420,6 +421,20 @@ export function createPlannerDirectoryRepository(options: PlannerDirectoryReposi
     const sql = `UPDATE ${target.table} SET archived_at = ${dialect === "postgresql" ? "$1" : "?"} ${whereClause}`;
     await db.query(sql, params);
     return args.seenIds.length;
+  }
+
+  async function archiveBrandBySourceUuid(sourceUuid: string, archivedAt: string = now()): Promise<void> {
+    const sql = `UPDATE planner_brands SET archived_at = ${dialect === "postgresql" ? "$1" : "?"} WHERE source_uuid = ${dialect === "postgresql" ? "$2" : "?"}`;
+    await db.query(sql, [archivedAt, sourceUuid]);
+  }
+
+  async function archiveProjectBySource(
+    sourceType: PlannerDirectorySourceType,
+    sourceUuid: string,
+    archivedAt: string = now()
+  ): Promise<void> {
+    const sql = `UPDATE planner_projects SET archived_at = ${dialect === "postgresql" ? "$1" : "?"} WHERE source_type = ${dialect === "postgresql" ? "$2" : "?"} AND source_project_id = ${dialect === "postgresql" ? "$3" : "?"}`;
+    await db.query(sql, [archivedAt, sourceType, sourceUuid]);
   }
 
   async function createSyncRun(input: {
@@ -1154,6 +1169,8 @@ export function createPlannerDirectoryRepository(options: PlannerDirectoryReposi
     upsertProjects,
     upsertEmployees,
     markMissingAsArchived,
+    archiveBrandBySourceUuid,
+    archiveProjectBySource,
     createSyncRun,
     updateSyncRun,
     addSyncIssue,
