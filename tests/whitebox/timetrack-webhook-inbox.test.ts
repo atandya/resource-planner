@@ -51,7 +51,9 @@ function createStatefulDb() {
     if (sql.startsWith("SELECT")) {
       const [eventId] = params as string[];
       const row = rows.get(eventId);
-      return row ? [[{ status: row.status }]] : [[]];
+      return row
+        ? [[{ status: row.status, processing_started_at: row.processing_started_at }]]
+        : [[]];
     }
 
     if (sql.startsWith("UPDATE") && sql.includes("status='processing'")) {
@@ -116,6 +118,26 @@ describe("timetrack webhook inbox", () => {
 
     await expect(inbox.claim(event)).resolves.toBe("claimed");
     await expect(inbox.claim(event)).resolves.toBe("processing");
+  });
+
+  it("reclaims a stale processing event after five minutes", async () => {
+    const { query, rows } = createStatefulDb();
+    const inboxAtTen = createTimetrackWebhookInbox({
+      db: { query },
+      now: () => "2026-07-13T10:00:00.000Z",
+    });
+
+    await expect(inboxAtTen.claim(event)).resolves.toBe("claimed");
+
+    rows.get(event.eventId)!.status = "processing";
+    rows.get(event.eventId)!.processing_started_at = "2026-07-13T09:54:59.000Z";
+
+    const inboxAtTenLater = createTimetrackWebhookInbox({
+      db: { query },
+      now: () => "2026-07-13T10:00:00.000Z",
+    });
+
+    await expect(inboxAtTenLater.claim(event)).resolves.toBe("claimed");
   });
 
   it("truncates a stored failure message to 500 characters", async () => {

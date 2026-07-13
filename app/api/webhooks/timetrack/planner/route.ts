@@ -25,6 +25,18 @@ function requiredEnv(name: string): string {
   return value;
 }
 
+function requiredWebhookSigningSecret(): string {
+  return (
+    process.env.TIMETRACK_WEBHOOK_SIGNING_SECRET ||
+    process.env.RP_TIMETRACK_WEBHOOK_SIGNING_SECRET ||
+    (() => {
+      throw new Error(
+        "Missing required env var: TIMETRACK_WEBHOOK_SIGNING_SECRET"
+      );
+    })()
+  );
+}
+
 function safeErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown error";
 }
@@ -64,7 +76,7 @@ function createProductionDependencies(): TimetrackWebhookRouteDependencies {
   const source = createTimetrackServiceSource({ token: requiredEnv("TIMETRACK_RP_READ_TOKEN") });
   const inbox = createTimetrackWebhookInbox();
   return {
-    signingSecret: requiredEnv("RP_TIMETRACK_WEBHOOK_SIGNING_SECRET"),
+    signingSecret: requiredWebhookSigningSecret(),
     inbox,
     process: (event) =>
       processTimetrackPlannerWebhook(event, { source, repository, now: () => new Date().toISOString() }),

@@ -16,9 +16,25 @@ export type TimetrackWebhookClaim = "claimed" | "completed" | "processing";
 
 const DEFAULT_DB = assignmentsDb as unknown as PlannerDirectoryDb;
 const MAX_ERROR_MESSAGE_LENGTH = 500;
+const PROCESSING_STALE_AFTER_MS = 5 * 60 * 1000;
 
 function defaultNow(): string {
   return new Date().toISOString();
+}
+
+function isProcessingStale(processingStartedAt: string | null, nowIso: string): boolean {
+  if (!processingStartedAt) {
+    return true;
+  }
+
+  const startedAtMs = Date.parse(processingStartedAt);
+  const nowMs = Date.parse(nowIso);
+
+  if (Number.isNaN(startedAtMs) || Number.isNaN(nowMs)) {
+    return true;
+  }
+
+  return nowMs - startedAtMs >= PROCESSING_STALE_AFTER_MS;
 }
 
 function getDialect(): SqlDialect {
@@ -71,16 +87,16 @@ export function createTimetrackWebhookInbox(options: TimetrackWebhookInboxOption
       receivedAt,
     ]);
 
-    const selectSql = `SELECT status FROM planner_timetrack_webhook_inbox WHERE event_id = ${placeholder(1, dialect)}`;
+    const selectSql = `SELECT status, processing_started_at FROM planner_timetrack_webhook_inbox WHERE event_id = ${placeholder(1, dialect)}`;
     const selectResult = await db.query(selectSql, [event.eventId]);
-    const row = readFirstRow<{ status: string }>(selectResult);
+    const row = readFirstRow<{ status: string; processing_started_at: string | null }>(selectResult);
     const status = row?.status;
 
     if (status === "completed") {
       return "completed";
     }
 
-    if (status === "processing") {
+    if (status === "processing" && !isProcessingStale(row?.processing_started_at ?? null, receivedAt)) {
       return "processing";
     }
 
