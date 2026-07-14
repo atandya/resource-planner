@@ -25,6 +25,29 @@ describe("createTimetrackServiceSource", () => {
     );
   });
 
+  it("falls back to the default URL when TIMETRACK_API_URL is empty", async () => {
+    const previousBaseUrl = process.env.TIMETRACK_API_URL;
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ data: { uuid: "brand-uuid" } }));
+
+    process.env.TIMETRACK_API_URL = "";
+    try {
+      const source = createTimetrackServiceSource({ token, fetchImpl });
+
+      await source.fetchBrandByUuid("brand-uuid");
+
+      expect(fetchImpl).toHaveBeenCalledWith(
+        `${baseUrl}/resource-planner/brands/brand-uuid`,
+        expect.anything()
+      );
+    } finally {
+      if (previousBaseUrl === undefined) {
+        delete process.env.TIMETRACK_API_URL;
+      } else {
+        process.env.TIMETRACK_API_URL = previousBaseUrl;
+      }
+    }
+  });
+
   it("returns null for a TimeTrack 404", async () => {
     const source = createTimetrackServiceSource({
       token,

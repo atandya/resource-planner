@@ -43,7 +43,7 @@ export function createTimetrackServiceSource(options: {
   baseUrl?: string;
   fetchImpl?: TimetrackFetch;
 }) {
-  const baseUrl = options.baseUrl ?? process.env.TIMETRACK_API_URL ?? "http://127.0.0.1:8000/api/v1";
+  const baseUrl = options.baseUrl ?? (process.env.TIMETRACK_API_URL || "http://127.0.0.1:8000/api/v1");
   const fetchImpl = options.fetchImpl ?? fetch;
 
   return {
