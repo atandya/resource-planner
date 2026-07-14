@@ -16,5 +16,6 @@ describe("MySqlApiClient", () => {
     const result = await client.getBrands();
 
     expect(result.status).toBe(500);
+    expect(result.data).toEqual([]);
   });
 });

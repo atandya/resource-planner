@@ -304,7 +304,7 @@ class MySqlApiClient {
           success: false,
           message: `Request failed: ${enhancedError.message}`,
           error: enhancedError,
-          data: null as T,
+          data: [] as T,
         };
       }
     }
