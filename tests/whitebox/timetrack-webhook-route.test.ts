@@ -40,7 +40,7 @@ function baseDeps() {
   return {
     signingSecret: secret,
     inbox: {
-      claim: vi.fn().mockResolvedValue("claimed"),
+      claim: vi.fn().mockResolvedValue({ status: "claimed", processingToken: "claim-token" }),
       complete: vi.fn().mockResolvedValue(undefined),
       fail: vi.fn().mockResolvedValue(undefined),
     },
@@ -55,14 +55,14 @@ describe("handleTimetrackPlannerWebhook", () => {
 
     expect(response.status).toBe(204);
     expect(dependencies.process).toHaveBeenCalledTimes(1);
-    expect(dependencies.inbox.complete).toHaveBeenCalledWith(eventId);
+    expect(dependencies.inbox.complete).toHaveBeenCalledWith(eventId, "claim-token");
     expect(dependencies.inbox.fail).not.toHaveBeenCalled();
   });
 
   it("returns 204 without reprocessing when the inbox reports the event already completed", async () => {
     const dependencies = deps({
       inbox: {
-        claim: vi.fn().mockResolvedValue("completed"),
+        claim: vi.fn().mockResolvedValue({ status: "completed" }),
         complete: vi.fn().mockResolvedValue(undefined),
         fail: vi.fn().mockResolvedValue(undefined),
       },
@@ -77,7 +77,7 @@ describe("handleTimetrackPlannerWebhook", () => {
   it("returns 409 when another request is currently processing the event", async () => {
     const dependencies = deps({
       inbox: {
-        claim: vi.fn().mockResolvedValue("processing"),
+        claim: vi.fn().mockResolvedValue({ status: "processing" }),
         complete: vi.fn().mockResolvedValue(undefined),
         fail: vi.fn().mockResolvedValue(undefined),
       },
@@ -97,7 +97,7 @@ describe("handleTimetrackPlannerWebhook", () => {
 
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toEqual({ error: "TimeTrack event processing failed" });
-    expect(dependencies.inbox.fail).toHaveBeenCalledWith(eventId, expect.any(String));
+    expect(dependencies.inbox.fail).toHaveBeenCalledWith(eventId, "claim-token", expect.any(String));
     expect(dependencies.inbox.complete).not.toHaveBeenCalled();
   });
 

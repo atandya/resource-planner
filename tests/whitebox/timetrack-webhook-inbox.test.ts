@@ -11,6 +11,7 @@ type InboxRow = {
   status: string;
   received_at: string;
   processing_started_at: string | null;
+  processing_token: string | null;
   completed_at: string | null;
   last_error: string | null;
 };
@@ -41,6 +42,7 @@ function createStatefulDb() {
           status: "received",
           received_at: receivedAt,
           processing_started_at: null,
+          processing_token: null,
           completed_at: null,
           last_error: null,
         });
@@ -52,37 +54,51 @@ function createStatefulDb() {
       const [eventId] = params as string[];
       const row = rows.get(eventId);
       return row
-        ? [[{ status: row.status, processing_started_at: row.processing_started_at }]]
+        ? [[{
+            status: row.status,
+            processing_started_at: row.processing_started_at,
+            processing_token: row.processing_token,
+          }]]
         : [[]];
     }
 
-    if (sql.startsWith("UPDATE") && sql.includes("status='processing'")) {
-      const [processingStartedAt, eventId] = params as string[];
+    if (sql.startsWith("UPDATE") && sql.includes("SET status='processing'")) {
+      const [processingStartedAt, processingToken, eventId, staleBefore] = params as string[];
       const row = rows.get(eventId);
-      if (row && (row.status === "received" || row.status === "failed")) {
+      const canClaim =
+        row &&
+        (row.status === "received" ||
+          row.status === "failed" ||
+          (row.status === "processing" &&
+            row.processing_started_at !== null &&
+            row.processing_started_at <= staleBefore));
+      if (canClaim) {
         row.status = "processing";
         row.processing_started_at = processingStartedAt;
+        row.processing_token = processingToken;
       }
       return [[]];
     }
 
     if (sql.startsWith("UPDATE") && sql.includes("status='completed'")) {
-      const [completedAt, eventId] = params as string[];
+      const [completedAt, eventId, processingToken] = params as string[];
       const row = rows.get(eventId);
-      if (row) {
+      if (row?.status === "processing" && row.processing_token === processingToken) {
         row.status = "completed";
         row.completed_at = completedAt;
         row.last_error = null;
+        row.processing_token = null;
       }
       return [[]];
     }
 
     if (sql.startsWith("UPDATE") && sql.includes("status='failed'")) {
-      const [lastError, eventId] = params as string[];
+      const [lastError, eventId, processingToken] = params as string[];
       const row = rows.get(eventId);
-      if (row) {
+      if (row?.status === "processing" && row.processing_token === processingToken) {
         row.status = "failed";
         row.last_error = lastError;
+        row.processing_token = null;
       }
       return [[]];
     }
@@ -98,55 +114,94 @@ describe("timetrack webhook inbox", () => {
     const { query } = createStatefulDb();
     const inbox = createTimetrackWebhookInbox({ db: { query }, now: () => "2026-07-13T10:00:00.000Z" });
 
-    await expect(inbox.claim(event)).resolves.toBe("claimed");
-    await inbox.complete(event.eventId);
-    await expect(inbox.claim(event)).resolves.toBe("completed");
+    const claim = await inbox.claim(event);
+    expect(claim.status).toBe("claimed");
+    if (claim.status !== "claimed") throw new Error("expected initial claim");
+
+    await inbox.complete(event.eventId, claim.processingToken);
+    await expect(inbox.claim(event)).resolves.toEqual({ status: "completed" });
   });
 
   it("allows a manually replayed failed event to be claimed again", async () => {
     const { query } = createStatefulDb();
     const inbox = createTimetrackWebhookInbox({ db: { query }, now: () => "2026-07-13T10:00:00.000Z" });
 
-    await inbox.claim(event);
-    await inbox.fail(event.eventId, "TimeTrack fetch failed");
-    await expect(inbox.claim(event)).resolves.toBe("claimed");
+    const claim = await inbox.claim(event);
+    if (claim.status !== "claimed") throw new Error("expected initial claim");
+
+    await inbox.fail(event.eventId, claim.processingToken, "TimeTrack fetch failed");
+    await expect(inbox.claim(event)).resolves.toMatchObject({ status: "claimed" });
   });
 
   it("reports a currently processing event as busy on a concurrent-style redelivery", async () => {
     const { query } = createStatefulDb();
     const inbox = createTimetrackWebhookInbox({ db: { query }, now: () => "2026-07-13T10:00:00.000Z" });
 
-    await expect(inbox.claim(event)).resolves.toBe("claimed");
-    await expect(inbox.claim(event)).resolves.toBe("processing");
+    await expect(inbox.claim(event)).resolves.toMatchObject({ status: "claimed" });
+    await expect(inbox.claim(event)).resolves.toEqual({ status: "processing" });
   });
 
-  it("reclaims a stale processing event after five minutes", async () => {
+  it("reclaims a stale processing event with a new lease token", async () => {
     const { query, rows } = createStatefulDb();
-    const inboxAtTen = createTimetrackWebhookInbox({
-      db: { query },
-      now: () => "2026-07-13T10:00:00.000Z",
+    rows.set(event.eventId, {
+      event_id: event.eventId,
+      event_type: event.eventType,
+      entity_type: event.entityType,
+      entity_uuid: event.entityUuid,
+      occurred_at: event.occurredAt,
+      status: "processing",
+      received_at: "2026-07-13T09:00:00.000Z",
+      processing_started_at: "2026-07-13T09:54:59.000Z",
+      processing_token: "expired-token",
+      completed_at: null,
+      last_error: null,
     });
+    const inbox = createTimetrackWebhookInbox({ db: { query }, now: () => "2026-07-13T10:00:00.000Z" });
 
-    await expect(inboxAtTen.claim(event)).resolves.toBe("claimed");
+    const claim = await inbox.claim(event);
+    expect(claim.status).toBe("claimed");
+    expect(claim).toMatchObject({ processingToken: expect.any(String) });
+    expect(rows.get(event.eventId)?.processing_token).not.toBe("expired-token");
+  });
 
-    rows.get(event.eventId)!.status = "processing";
+  it("does not let an expired lease complete a newer claim", async () => {
+    const { query, rows } = createStatefulDb();
+    const inbox = createTimetrackWebhookInbox({ db: { query }, now: () => "2026-07-13T10:00:00.000Z" });
+    const first = await inbox.claim(event);
+    if (first.status !== "claimed") throw new Error("expected initial claim");
     rows.get(event.eventId)!.processing_started_at = "2026-07-13T09:54:59.000Z";
+    const second = await inbox.claim(event);
+    if (second.status !== "claimed") throw new Error("expected stale reclaim");
 
-    const inboxAtTenLater = createTimetrackWebhookInbox({
-      db: { query },
-      now: () => "2026-07-13T10:00:00.000Z",
-    });
+    await inbox.complete(event.eventId, first.processingToken);
+    expect(rows.get(event.eventId)?.status).toBe("processing");
+    await inbox.complete(event.eventId, second.processingToken);
+    expect(rows.get(event.eventId)?.status).toBe("completed");
+  });
 
-    await expect(inboxAtTenLater.claim(event)).resolves.toBe("claimed");
+  it("does not let an expired lease fail a newer claim", async () => {
+    const { query, rows } = createStatefulDb();
+    const inbox = createTimetrackWebhookInbox({ db: { query }, now: () => "2026-07-13T10:00:00.000Z" });
+    const first = await inbox.claim(event);
+    if (first.status !== "claimed") throw new Error("expected initial claim");
+    rows.get(event.eventId)!.processing_started_at = "2026-07-13T09:54:59.000Z";
+    const second = await inbox.claim(event);
+    if (second.status !== "claimed") throw new Error("expected stale reclaim");
+
+    await inbox.fail(event.eventId, first.processingToken, "stale worker failed");
+    expect(rows.get(event.eventId)?.status).toBe("processing");
+    await inbox.fail(event.eventId, second.processingToken, "current worker failed");
+    expect(rows.get(event.eventId)?.status).toBe("failed");
   });
 
   it("truncates a stored failure message to 500 characters", async () => {
     const { query, rows } = createStatefulDb();
     const inbox = createTimetrackWebhookInbox({ db: { query }, now: () => "2026-07-13T10:00:00.000Z" });
 
-    await inbox.claim(event);
+    const claim = await inbox.claim(event);
+    if (claim.status !== "claimed") throw new Error("expected initial claim");
     const longMessage = "x".repeat(600);
-    await inbox.fail(event.eventId, longMessage);
+    await inbox.fail(event.eventId, claim.processingToken, longMessage);
 
     expect(rows.get(event.eventId)?.last_error).toHaveLength(500);
   });

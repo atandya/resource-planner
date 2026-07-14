@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS planner_timetrack_webhook_inbox (
   status varchar(16) NOT NULL,
   received_at timestamp NOT NULL,
   processing_started_at timestamp NULL,
+  processing_token varchar(64) NULL,
   completed_at timestamp NULL,
   last_error text NULL
 );

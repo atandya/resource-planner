@@ -4,7 +4,10 @@ import {
   TimetrackWebhookValidationError,
 } from "@/lib/planner-directory/timetrack-webhook";
 import type { TimetrackPlannerWebhookEvent } from "@/lib/planner-directory/timetrack-webhook";
-import { createTimetrackWebhookInbox } from "@/lib/planner-directory/timetrack-webhook-inbox";
+import {
+  createTimetrackWebhookInbox,
+  type TimetrackWebhookClaim,
+} from "@/lib/planner-directory/timetrack-webhook-inbox";
 import { processTimetrackPlannerWebhook } from "@/lib/planner-directory/timetrack-webhook-handler";
 import { createTimetrackServiceSource } from "@/lib/planner-directory/timetrack-service-source";
 import { createPlannerDirectoryRepository } from "@/lib/planner-directory/repository";
@@ -12,9 +15,9 @@ import { createPlannerDirectoryRepository } from "@/lib/planner-directory/reposi
 export type TimetrackWebhookRouteDependencies = {
   signingSecret: string;
   inbox: {
-    claim(event: TimetrackPlannerWebhookEvent): Promise<"claimed" | "completed" | "processing">;
-    complete(eventId: string): Promise<void>;
-    fail(eventId: string, message: string): Promise<void>;
+    claim(event: TimetrackPlannerWebhookEvent): Promise<TimetrackWebhookClaim>;
+    complete(eventId: string, processingToken: string): Promise<void>;
+    fail(eventId: string, processingToken: string, message: string): Promise<void>;
   };
   process(event: TimetrackPlannerWebhookEvent): Promise<void>;
 };
@@ -52,14 +55,14 @@ export async function handleTimetrackPlannerWebhook(
       dependencies.signingSecret
     );
     const claim = await dependencies.inbox.claim(event);
-    if (claim === "completed") return new Response(null, { status: 204 });
-    if (claim === "processing") return Response.json({ error: "Event is processing" }, { status: 409 });
+    if (claim.status === "completed") return new Response(null, { status: 204 });
+    if (claim.status === "processing") return Response.json({ error: "Event is processing" }, { status: 409 });
     try {
       await dependencies.process(event);
-      await dependencies.inbox.complete(event.eventId);
+      await dependencies.inbox.complete(event.eventId, claim.processingToken);
       return new Response(null, { status: 204 });
     } catch (error) {
-      await dependencies.inbox.fail(event.eventId, safeErrorMessage(error));
+      await dependencies.inbox.fail(event.eventId, claim.processingToken, safeErrorMessage(error));
       return Response.json({ error: "TimeTrack event processing failed" }, { status: 500 });
     }
   } catch (error) {
