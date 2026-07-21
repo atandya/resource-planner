@@ -8,7 +8,10 @@ const fetchMock = vi.fn();
 
 beforeEach(() => {
   fetchMock.mockReset();
-  global.fetch = fetchMock as unknown as typeof fetch;
+  // stubGlobal rather than a direct `global.fetch =` assignment: only stubs
+  // registered this way are tracked, so unstubAllGlobals below actually
+  // restores the real fetch instead of silently doing nothing.
+  vi.stubGlobal("fetch", fetchMock);
 });
 
 afterEach(() => {
@@ -70,13 +73,35 @@ describe("fetchExportCount", () => {
     expect(init.signal).toBe(controller.signal);
   });
 
-  it("passes the abort signal through so an in-flight count can be cancelled", async () => {
+  it("lets an aborted signal cancel the request instead of resolving a count", async () => {
+    // The mock honours the signal, so abort() is what causes the rejection:
+    // drop the abort() line and this fetch resolves with a count and fails.
+    fetchMock.mockImplementation(async (_url: string, init: { signal: AbortSignal }) => {
+      if (init.signal.aborted) {
+        throw Object.assign(new Error("The operation was aborted."), { name: "AbortError" });
+      }
+      return jsonResponse({ count: 3 });
+    });
     const controller = new AbortController();
-    fetchMock.mockRejectedValue(Object.assign(new Error("aborted"), { name: "AbortError" }));
     controller.abort();
 
     await expect(
       fetchExportCount(ENDPOINT, { dateRange: RANGE }, controller.signal),
-    ).rejects.toThrow();
+    ).rejects.toThrow("aborted");
+  });
+
+  it("resolves normally when the same signal is left unaborted", async () => {
+    // Positive control for the test above: same signal-honouring mock, no abort.
+    fetchMock.mockImplementation(async (_url: string, init: { signal: AbortSignal }) => {
+      if (init.signal.aborted) {
+        throw Object.assign(new Error("The operation was aborted."), { name: "AbortError" });
+      }
+      return jsonResponse({ count: 3 });
+    });
+    const controller = new AbortController();
+
+    await expect(
+      fetchExportCount(ENDPOINT, { dateRange: RANGE }, controller.signal),
+    ).resolves.toBe(3);
   });
 });
