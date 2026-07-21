@@ -6,6 +6,12 @@ describe("buildExportSearchParams", () => {
     expect(
       buildExportSearchParams({ dateRange: { start: "2026-07-01", end: "" } }).toString(),
     ).toBe("");
+    expect(
+      buildExportSearchParams({ dateRange: { start: "", end: "2026-07-31" } }).toString(),
+    ).toBe("");
+    expect(
+      buildExportSearchParams({ dateRange: { start: "", end: "" } }).toString(),
+    ).toBe("");
     const params = buildExportSearchParams({
       dateRange: { start: "2026-07-01", end: "2026-07-31" },
     });
@@ -31,5 +37,26 @@ describe("buildExportSearchParams", () => {
     });
     expect(params.has("brandIds")).toBe(false);
     expect(params.has("employeeIds")).toBe(false);
+  });
+
+  it("omits an empty-string filter (cleared select)", () => {
+    const params = buildExportSearchParams({
+      dateRange: { start: "2026-07-01", end: "2026-07-31" },
+      filters: { brandId: "" },
+    });
+    expect(params.has("brandIds")).toBe(false);
+  });
+
+  it("produces an identical, expected serialized string across repeated calls with the same input", () => {
+    const input = {
+      dateRange: { start: "2026-07-01", end: "2026-07-31" },
+      filters: { brandId: "b1", departmentId: "d1", projectId: "p1", employeeIds: ["e1", "e2"] },
+    };
+    const first = buildExportSearchParams(input).toString();
+    const second = buildExportSearchParams(input).toString();
+    expect(first).toBe(second);
+    expect(first).toBe(
+      "startDate=2026-07-01&endDate=2026-07-31&brandIds=b1&departmentIds=d1&projectIds=p1&employeeIds=e1%2Ce2",
+    );
   });
 });
