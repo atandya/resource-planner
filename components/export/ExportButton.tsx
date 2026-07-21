@@ -13,7 +13,11 @@ import {
 import { ExportDialog } from "./ExportDialog";
 import type { ExportFilters } from "@/lib/export/export-params";
 
-export type ExportType = "assignments" | "utilization" | "projects" | "conflicts" | "brand";
+import type { ExportType } from "@/lib/export/export-types";
+
+// Re-exported so existing importers (components/export/index.ts and friends)
+// keep resolving ExportType here, while the union itself lives in lib/.
+export type { ExportType };
 export type ExportFormat = "csv" | "excel";
 
 export type ExportOption = {

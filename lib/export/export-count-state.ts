@@ -6,6 +6,8 @@
  * these functions decide and holds no branching of its own.
  */
 
+import type { ExportType } from "./export-types";
+
 export type ExportCountStatus = "idle" | "loading" | "ready" | "error";
 
 export type ExportCountBanner =
@@ -20,30 +22,37 @@ export interface ExportCountView {
   blocksExport: boolean;
 }
 
-/** Export types with a countOnly pre-flight endpoint. */
-export function supportsLiveCount(exportType: string): boolean {
-  return exportType === "brand";
+/**
+ * The countOnly pre-flight route for an export type, or null when that type
+ * has no count endpoint.
+ *
+ * Whether a type can be counted and where its count comes from are the same
+ * decision, so they are one function: a countable type cannot end up pointing
+ * at another type's route, and adding a second countable type is a single edit.
+ */
+export function countEndpointFor(exportType: ExportType): string | null {
+  return exportType === "brand" ? "/api/export/brand/excel" : null;
 }
 
 export function shouldFetchExportCount(input: {
   open: boolean;
-  exportType: string;
+  exportType: ExportType;
   dateRange: { start: string; end: string };
 }): boolean {
   return (
     input.open &&
-    supportsLiveCount(input.exportType) &&
+    countEndpointFor(input.exportType) !== null &&
     Boolean(input.dateRange.start) &&
     Boolean(input.dateRange.end)
   );
 }
 
 export function resolveExportCountView(input: {
-  exportType: string;
+  exportType: ExportType;
   status: ExportCountStatus;
   count: number | null;
 }): ExportCountView {
-  if (!supportsLiveCount(input.exportType)) {
+  if (countEndpointFor(input.exportType) === null) {
     return { banner: null, blocksExport: false };
   }
   if (input.status === "loading") {

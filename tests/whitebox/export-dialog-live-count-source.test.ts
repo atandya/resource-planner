@@ -9,17 +9,29 @@ describe("ExportDialog — live record count", () => {
     expect(dialog).not.toContain("Approximately");
   });
 
-  it("fetches a debounced countOnly pre-flight that is cancelled on cleanup", () => {
-    expect(dialog).toContain('params.append("countOnly", "true")');
+  it("debounces the count pre-flight and cancels it on cleanup", () => {
     expect(dialog).toContain("AbortController");
+    expect(dialog).toContain("setTimeout");
     expect(dialog).toContain("clearTimeout(timer)");
     expect(dialog).toContain("controller.abort()");
+    // A response that lands after cleanup must not overwrite a newer count.
+    expect(dialog).toContain("if (controller.signal.aborted) return;");
   });
 
-  it("builds params via the shared helper for both the count and the export", () => {
-    expect(dialog).toContain("buildExportSearchParams");
-    const occurrences = dialog.split("buildExportSearchParams(").length - 1;
-    expect(occurrences).toBeGreaterThanOrEqual(2);
+  it("delegates the count request itself, rather than inlining fetch plumbing", () => {
+    // The request's behaviour (countOnly, non-200 handling, malformed bodies)
+    // is covered for real in lib/export/fetch-export-count.test.ts.
+    expect(dialog).toContain("fetchExportCount(endpoint,");
+    expect(dialog).not.toContain('params.append("countOnly", "true")');
+  });
+
+  it("builds export params via the shared helper and takes the count URL from the capability module", () => {
+    expect(dialog).toContain("buildExportSearchParams(");
+    // The count URL comes from countEndpointFor, not from a literal in here.
+    // (handleExport's own URL switch still names routes directly — that is a
+    // separate concern from the count capability.)
+    expect(dialog).toContain("countEndpointFor(exportOption.type)");
+    expect(dialog).toContain("fetchExportCount(endpoint,");
   });
 
   it("delegates banner and blocking decisions to the pure module", () => {

@@ -21,10 +21,12 @@ import { downloadCsvFile, generateExportFilename } from "@/lib/export/csv-export
 import { downloadExcelFile, generateExcelFilename } from "@/lib/export/excel-export";
 import { buildExportSearchParams, type ExportFilters } from "@/lib/export/export-params";
 import {
+  countEndpointFor,
   resolveExportCountView,
   shouldFetchExportCount,
   type ExportCountStatus,
 } from "@/lib/export/export-count-state";
+import { fetchExportCount } from "@/lib/export/fetch-export-count";
 
 const FORMAT_CHOICES: Array<{
   value: ExportFormat;
@@ -97,7 +99,8 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   // Live record count: debounced countOnly pre-flight against the same route
   // and params the export itself uses, so the number can't disagree with the file.
   useEffect(() => {
-    if (!shouldFetchExportCount({ open, exportType: exportOption.type, dateRange })) {
+    const endpoint = countEndpointFor(exportOption.type);
+    if (!endpoint || !shouldFetchExportCount({ open, exportType: exportOption.type, dateRange })) {
       setRecordCount(null);
       setCountStatus("idle");
       return;
@@ -106,19 +109,11 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     setCountStatus("loading");
     const timer = setTimeout(async () => {
       try {
-        const params = buildExportSearchParams({ dateRange, filters });
-        params.append("countOnly", "true");
-        const response = await fetch(`/api/export/brand/excel?${params.toString()}`, {
-          signal: controller.signal,
-        });
-        // Non-200 means the request failed (401/400/500) — never "zero rows",
-        // which the route returns as 200 with { count: 0 }.
-        if (!response.ok) throw new Error(`Count request failed: ${response.status}`);
-        const data = await response.json();
+        const count = await fetchExportCount(endpoint, { dateRange, filters }, controller.signal);
         // A response that resolved just before cleanup must not overwrite the
         // count for a range the user has already moved on from.
         if (controller.signal.aborted) return;
-        setRecordCount(typeof data.count === "number" ? data.count : null);
+        setRecordCount(count);
         setCountStatus("ready");
       } catch {
         if (!controller.signal.aborted) {
@@ -133,6 +128,10 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     };
     // `filters` identity changes on every parent render, so depend on its
     // primitive fields — same reason the range-seeding effect above ignores it.
+    // departmentId/projectId/employeeIds are listed deliberately: the brand
+    // route reads only startDate/endDate/brandIds today, but they are already
+    // in the params both requests share, so a route that starts honouring them
+    // re-counts correctly without anyone remembering to touch this array.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     open,
@@ -389,8 +388,10 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
                   <>
                     <Icon icon="lucide:info" className="h-4 w-4" />
                     <span>
-                      <span className="font-semibold text-foreground">{countView.banner.count}</span>{" "}
-                      records will be exported
+                      <span className="font-semibold text-foreground">
+                        {countView.banner.count.toLocaleString()}
+                      </span>{" "}
+                      record{countView.banner.count === 1 ? "" : "s"} will be exported
                     </span>
                   </>
                 )}

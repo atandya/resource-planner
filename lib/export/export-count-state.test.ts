@@ -1,17 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
+  countEndpointFor,
   resolveExportCountView,
   shouldFetchExportCount,
-  supportsLiveCount,
 } from "./export-count-state";
+import type { ExportType } from "./export-types";
 
 const RANGE = { start: "2026-07-01", end: "2026-07-31" };
 
-describe("supportsLiveCount", () => {
-  it("is true only for the brand report", () => {
-    expect(supportsLiveCount("brand")).toBe(true);
-    for (const type of ["assignments", "utilization", "projects", "conflicts"]) {
-      expect(supportsLiveCount(type)).toBe(false);
+const UNCOUNTABLE: ExportType[] = ["assignments", "utilization", "projects", "conflicts"];
+
+describe("countEndpointFor", () => {
+  it("returns the brand route for the only countable export type", () => {
+    expect(countEndpointFor("brand")).toBe("/api/export/brand/excel");
+  });
+
+  it("returns null for every export type without a count endpoint", () => {
+    for (const type of UNCOUNTABLE) {
+      expect(countEndpointFor(type)).toBeNull();
     }
   });
 });
