@@ -407,11 +407,14 @@ async function runIncremental(
   source: PlannerDirectorySource,
   now: () => string
 ): Promise<SyncSummary> {
+  // These reads decide what gets upserted below (filterChanged*), so they must see
+  // committed rows. A cached snapshot warmed by an earlier request could make a
+  // genuinely changed row look unchanged and silently skip its update.
   const [existingDepartments, existingBrands, existingProjects, existingEmployees] = await Promise.all([
     repository.listDepartments(),
-    repository.listBrands(),
-    repository.listProjects(),
-    repository.listEmployees(),
+    repository.listBrands({ bypassCache: true }),
+    repository.listProjects({ bypassCache: true }),
+    repository.listEmployees({ bypassCache: true }),
   ]);
   const [departmentSource, brandSource, campaignSource, pitchSource, employeeSource] = await Promise.all([
     source.fetchDepartments(session),
