@@ -22,6 +22,7 @@ import { downloadExcelFile, generateExcelFilename } from "@/lib/export/excel-exp
 import { buildExportSearchParams, type ExportFilters } from "@/lib/export/export-params";
 import {
   BRAND_EXPORT_ROUTE,
+  DETAILED_EXPORT_ROUTE,
   countEndpointFor,
   resolveExportCountView,
   shouldFetchExportCount,
@@ -35,6 +36,7 @@ import {
   type ExportFilterNames,
 } from "@/lib/export/applied-filters";
 import { BrandScopeField } from "./BrandScopeField";
+import { DepartmentScopeField } from "./DepartmentScopeField";
 import type { FilterColumnOption } from "@/components/filters/FilterColumn";
 import { shouldReseed, type ExportDialogSeed } from "@/lib/export/export-dialog-seed";
 
@@ -86,6 +88,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   const [countStatus, setCountStatus] = useState<ExportCountStatus>("idle");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [scopeBrands, setScopeBrands] = useState<FilterColumnOption[]>([]);
+  const [scopeDepartments, setScopeDepartments] = useState<FilterColumnOption[]>([]);
   const lastAppliedSeed = useRef<ExportDialogSeed | null>(null);
 
   // Set default format based on what's available
@@ -104,6 +107,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     if (!open) return;
     const incomingSeed: ExportDialogSeed = {
       brandIds: filters?.brandIds ?? [],
+      departmentIds: filters?.departmentIds ?? [],
       startDate: filters?.startDate,
       endDate: filters?.endDate,
     };
@@ -117,8 +121,12 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
       start: incomingSeed.startDate || monthStart.toISOString().split("T")[0],
       end: incomingSeed.endDate || monthEnd.toISOString().split("T")[0],
     });
-    const nameById = filterNames?.brandIds ?? {};
-    setScopeBrands(incomingSeed.brandIds.map((id) => ({ id, label: nameById[id] ?? id })));
+    const brandNameById = filterNames?.brandIds ?? {};
+    setScopeBrands(incomingSeed.brandIds.map((id) => ({ id, label: brandNameById[id] ?? id })));
+    const departmentNameById = filterNames?.departmentIds ?? {};
+    setScopeDepartments(
+      incomingSeed.departmentIds.map((id) => ({ id, label: departmentNameById[id] ?? id })),
+    );
     // Seed inputs are read fresh on each open; comparing inside the effect is
     // the point, so `open` is the only dependency (same as before).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -131,18 +139,21 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     () =>
       selectHonoredFilters(exportOption.type, {
         ...filters,
-        // brandIds comes from dialog-local scope, not the timeline prop: the
-        // scope field's Apply is the source of truth once the dialog has seeded.
+        // brandIds and departmentIds come from dialog-local scope, not the
+        // timeline props: each scope field's Apply is the source of truth once
+        // the dialog has seeded.
         brandIds: scopeBrands.map((option) => option.id),
+        departmentIds: scopeDepartments.map((option) => option.id),
       }),
     // `filters` gets a new identity on every parent render; its inner arrays
     // are the stable pieces this derivation can actually consume, so depend on
-    // those (brandIds is overridden by scopeBrands and deliberately absent).
+    // those (brandIds and departmentIds are overridden by the scope state above
+    // and are deliberately absent).
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       exportOption.type,
       scopeBrands,
-      filters?.departmentIds,
+      scopeDepartments,
       filters?.projectIds,
       filters?.employeeIds,
     ],
@@ -243,6 +254,10 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
         // Same route constant the count pre-flight resolves to, so the number
         // in the dialog and the file it describes can never target different URLs.
         apiUrl = `${BRAND_EXPORT_ROUTE}?${params.toString()}`;
+      } else if (format === "excel" && exportOption.type === "detailed") {
+        // Same rule as the brand branch above: one constant for both the count
+        // pre-flight and the file, so they can never target different URLs.
+        apiUrl = `${DETAILED_EXPORT_ROUTE}?${params.toString()}`;
       } else {
         apiUrl = `/api/export/${exportOption.type}?${params.toString()}`;
       }
@@ -410,6 +425,15 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
                 {FILTER_LABELS.brandIds.many}
               </Label>
               <BrandScopeField scope={scopeBrands} onApply={setScopeBrands} />
+            </div>
+          )}
+
+          {honorsFilter(exportOption.type, "departmentIds") && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                {FILTER_LABELS.departmentIds.many}
+              </Label>
+              <DepartmentScopeField scope={scopeDepartments} onApply={setScopeDepartments} />
             </div>
           )}
 

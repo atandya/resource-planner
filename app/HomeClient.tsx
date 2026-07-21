@@ -121,10 +121,6 @@ export function HomeClient({
   const [appliedDepartmentIds, setAppliedDepartmentIds] = useState<string[]>([]);
 
   const appliedBrandIds = useMemo(() => appliedBrands.map((b) => b.id), [appliedBrands]);
-  const appliedBrandNames = useMemo(
-    () => ({ brandIds: Object.fromEntries(appliedBrands.map((b) => [b.id, b.name])) }),
-    [appliedBrands]
-  );
 
   const [draftBrands, setDraftBrands] = useState<Brand[]>([]);
   const [draftProjects, setDraftProjects] = useState<ProjectOption[]>([]);
@@ -141,6 +137,17 @@ export function HomeClient({
   const [projectSearch, setProjectSearch] = useState("");
   const debouncedProjectSearch = useDebounce(projectSearch, 300);
   const { data: departments = [] } = useDepartments();
+
+  // Display names for the export dialog's seeded scope fields, so it labels the
+  // ids the timeline applied. Departments come from the same catalog the filter
+  // panel renders, since the applied department filter carries ids only.
+  const exportFilterNames = useMemo(
+    () => ({
+      brandIds: Object.fromEntries(appliedBrands.map((b) => [b.id, b.name])),
+      departmentIds: Object.fromEntries(departments.map((d) => [d.id, d.name])),
+    }),
+    [appliedBrands, departments]
+  );
 
   // Infinite filter catalogs: search and brand scope are server-side, so the
   // dropdown payload stays bounded as the directory grows. The project column
@@ -315,7 +322,7 @@ export function HomeClient({
                 startDate: timelineExportRange?.startDate,
                 endDate: timelineExportRange?.endDate,
               }}
-              filterNames={appliedBrandNames}
+              filterNames={exportFilterNames}
             />
             {DASHBOARD_FEATURE_ENABLED && hasDashboardAccess && (
               <Button asChild variant="outline" data-testid="open-dashboard-button">

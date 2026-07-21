@@ -85,4 +85,15 @@ describe("ExportDialog — live record count", () => {
   it("derives the export's brandIds from dialog-local scope", () => {
     expect(dialog).toContain("scopeBrands.map((option) => option.id)");
   });
+
+  it("renders a departments scope field for exports that honor it", () => {
+    expect(dialog).toContain("DepartmentScopeField");
+    expect(dialog).toContain('honorsFilter(exportOption.type, "departmentIds")');
+    expect(dialog).toContain("scopeDepartments.map((option) => option.id)");
+  });
+
+  it("seeds departments under the same rule-C effect", () => {
+    expect(dialog).toContain("setScopeDepartments");
+    expect(dialog).toContain("departmentIds: filters?.departmentIds ?? []");
+  });
 });
