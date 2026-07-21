@@ -6,14 +6,16 @@
  * exact same parameters as the file that gets downloaded.
  */
 
+export interface ExportFilters {
+  brandId?: string | null;
+  departmentId?: string | null;
+  projectId?: string | null;
+  employeeIds?: string[];
+}
+
 export interface ExportQueryInput {
   dateRange: { start: string; end: string };
-  filters?: {
-    brandId?: string | null;
-    departmentId?: string | null;
-    projectId?: string | null;
-    employeeIds?: string[];
-  };
+  filters?: ExportFilters;
 }
 
 export function buildExportSearchParams({ dateRange, filters }: ExportQueryInput): URLSearchParams {

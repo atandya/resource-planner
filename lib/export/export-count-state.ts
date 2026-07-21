@@ -1,0 +1,59 @@
+/**
+ * Decision logic for the export dialog's live record count.
+ *
+ * Lives outside the component so the banner states and the "nothing to
+ * export" guard are unit-testable without a DOM. The dialog renders what
+ * these functions decide and holds no branching of its own.
+ */
+
+export type ExportCountStatus = "idle" | "loading" | "ready" | "error";
+
+export type ExportCountBanner =
+  | { kind: "loading" }
+  | { kind: "empty" }
+  | { kind: "count"; count: number };
+
+export interface ExportCountView {
+  /** Banner to render, or null to render nothing at all. */
+  banner: ExportCountBanner | null;
+  /** True only when the count is known to be zero, so the export is certain to yield an empty file. */
+  blocksExport: boolean;
+}
+
+/** Export types with a countOnly pre-flight endpoint. */
+export function supportsLiveCount(exportType: string): boolean {
+  return exportType === "brand";
+}
+
+export function shouldFetchExportCount(input: {
+  open: boolean;
+  exportType: string;
+  dateRange: { start: string; end: string };
+}): boolean {
+  return (
+    input.open &&
+    supportsLiveCount(input.exportType) &&
+    Boolean(input.dateRange.start) &&
+    Boolean(input.dateRange.end)
+  );
+}
+
+export function resolveExportCountView(input: {
+  exportType: string;
+  status: ExportCountStatus;
+  count: number | null;
+}): ExportCountView {
+  if (!supportsLiveCount(input.exportType)) {
+    return { banner: null, blocksExport: false };
+  }
+  if (input.status === "loading") {
+    return { banner: { kind: "loading" }, blocksExport: false };
+  }
+  if (input.status === "ready" && typeof input.count === "number") {
+    return input.count === 0
+      ? { banner: { kind: "empty" }, blocksExport: true }
+      : { banner: { kind: "count", count: input.count }, blocksExport: false };
+  }
+  // idle, error, or ready without a usable number: say nothing, block nothing.
+  return { banner: null, blocksExport: false };
+}
