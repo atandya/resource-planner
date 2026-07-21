@@ -31,14 +31,16 @@ describe("ExportDialog — live record count", () => {
   it("delegates the count request itself, rather than inlining fetch plumbing", () => {
     // The request's behaviour (countOnly, non-200 handling, malformed bodies)
     // is covered for real in lib/export/fetch-export-count.test.ts.
-    expect(dialog).toContain("fetchExportCount(endpoint,");
+    // Whitespace-tolerant: the call spans lines after the honored-filters change.
+    expect(dialog).toMatch(/fetchExportCount\(\s*endpoint,/);
     expect(dialog).not.toContain('params.append("countOnly", "true")');
   });
 
   it("builds export params via the shared helper and takes the count URL from the capability module", () => {
     expect(dialog).toContain("buildExportSearchParams(");
     expect(dialog).toContain("countEndpointFor(exportOption.type)");
-    expect(dialog).toContain("fetchExportCount(endpoint,");
+    // Whitespace-tolerant: the call spans lines after the honored-filters change.
+    expect(dialog).toMatch(/fetchExportCount\(\s*endpoint,/);
     // Neither the count nor the export spells the brand route out here: both
     // resolve to the one constant, so the route cannot move for one and not
     // the other. (The other four types keep their literals — out of scope.)
@@ -50,5 +52,22 @@ describe("ExportDialog — live record count", () => {
     expect(dialog).toContain("resolveExportCountView");
     expect(dialog).toContain("shouldFetchExportCount");
     expect(dialog).toContain("countView.blocksExport");
+  });
+
+  it("sends only the filters the chosen export honors, to both the count and the file", () => {
+    expect(dialog).toContain("selectHonoredFilters(exportOption.type, filters)");
+    expect(dialog).toContain("filters: honoredFilters");
+    // The count must re-fire on honored-filter changes only, and must not read
+    // the singular fields that used to truncate a multi-select to its first id.
+    expect(dialog).toContain("honoredFiltersKey");
+    expect(dialog).not.toContain("filters?.brandId,");
+    expect(dialog).not.toContain("filters?.departmentId,");
+    expect(dialog).not.toContain("filters?.projectId,");
+  });
+
+  it("renders the applied-filter panel from the pure describer", () => {
+    expect(dialog).toContain("describeAppliedFilters");
+    // Raw ids were previously printed straight into the panel.
+    expect(dialog).not.toContain("Brand: {filters.brandId}");
   });
 });

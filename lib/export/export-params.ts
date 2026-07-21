@@ -4,12 +4,16 @@
  * Used by both the real export fetch and the countOnly pre-flight in
  * ExportDialog, so the record count shown in the dialog is built from the
  * exact same parameters as the file that gets downloaded.
+ *
+ * Every filter is a list. The export routes all parse these params with
+ * `.split(",")`, so a multi-select filter must be sent whole — sending only the
+ * first selection silently narrows the export to a scope the user didn't choose.
  */
 
 export interface ExportFilters {
-  brandId?: string | null;
-  departmentId?: string | null;
-  projectId?: string | null;
+  brandIds?: string[];
+  departmentIds?: string[];
+  projectIds?: string[];
   employeeIds?: string[];
 }
 
@@ -24,9 +28,14 @@ export function buildExportSearchParams({ dateRange, filters }: ExportQueryInput
     params.append("startDate", dateRange.start);
     params.append("endDate", dateRange.end);
   }
-  if (filters?.brandId) params.append("brandIds", filters.brandId);
-  if (filters?.departmentId) params.append("departmentIds", filters.departmentId);
-  if (filters?.projectId) params.append("projectIds", filters.projectId);
-  if (filters?.employeeIds?.length) params.append("employeeIds", filters.employeeIds.join(","));
+  appendList(params, "brandIds", filters?.brandIds);
+  appendList(params, "departmentIds", filters?.departmentIds);
+  appendList(params, "projectIds", filters?.projectIds);
+  appendList(params, "employeeIds", filters?.employeeIds);
   return params;
+}
+
+function appendList(params: URLSearchParams, key: string, values?: string[]): void {
+  const present = values?.filter(Boolean) ?? [];
+  if (present.length) params.append(key, present.join(","));
 }

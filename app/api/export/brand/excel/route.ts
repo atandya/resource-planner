@@ -28,6 +28,12 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
+    // brandIds is comma-separated — the timeline's brand filter is multi-select.
+    // departmentIds/projectIds are deliberately NOT read: this report is one row
+    // per (brand, employee) with projects summed across each brand, so a project
+    // filter contradicts its shape, and department scoping isn't offered here.
+    // lib/export/applied-filters.ts encodes that, so the dialog neither sends
+    // them nor claims they were applied.
     const brandIds = searchParams.get('brandIds');
 
     if (!startDate || !endDate) {

@@ -58,7 +58,10 @@ describe("fetchExportCount", () => {
 
     await fetchExportCount(
       ENDPOINT,
-      { dateRange: RANGE, filters: { brandId: "brand-1", employeeIds: ["e1", "e2"] } },
+      {
+        dateRange: RANGE,
+        filters: { brandIds: ["brand-1", "brand-2"], employeeIds: ["e1", "e2"] },
+      },
       controller.signal,
     );
 
@@ -68,7 +71,9 @@ describe("fetchExportCount", () => {
     expect(url).toContain("countOnly=true");
     expect(url).toContain("startDate=2026-07-01");
     expect(url).toContain("endDate=2026-07-31");
-    expect(url).toContain("brandIds=brand-1");
+    // Every selected brand must reach the count, or it reports a narrower scope
+    // than the export will actually produce.
+    expect(url).toContain("brandIds=brand-1%2Cbrand-2");
     expect(url).toContain("employeeIds=e1%2Ce2");
     expect(init.signal).toBe(controller.signal);
   });

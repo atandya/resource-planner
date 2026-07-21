@@ -114,10 +114,14 @@ export function HomeClient({
   });
 
   // APPLIED ids flow to the timeline context; DRAFT objects live inside the
-  // FilterPanel until the user hits Apply.
-  const [appliedBrandIds, setAppliedBrandIds] = useState<string[]>([]);
+  // FilterPanel until the user hits Apply. Brands keep their objects because the
+  // export dialog names them — a raw brand id means nothing to a reader.
+  const [appliedBrands, setAppliedBrands] = useState<Brand[]>([]);
   const [appliedProjectIds, setAppliedProjectIds] = useState<string[]>([]);
   const [appliedDepartmentIds, setAppliedDepartmentIds] = useState<string[]>([]);
+
+  const appliedBrandIds = useMemo(() => appliedBrands.map((b) => b.id), [appliedBrands]);
+  const appliedBrandNames = useMemo(() => appliedBrands.map((b) => b.name), [appliedBrands]);
 
   const [draftBrands, setDraftBrands] = useState<Brand[]>([]);
   const [draftProjects, setDraftProjects] = useState<ProjectOption[]>([]);
@@ -244,7 +248,7 @@ export function HomeClient({
   }, []);
 
   const handleApplyFilters = useCallback(() => {
-    setAppliedBrandIds(draftBrands.map((b) => b.id));
+    setAppliedBrands(draftBrands);
     setAppliedProjectIds(draftProjects.map((p) => p.id));
     setAppliedDepartmentIds(draftDepartmentIds);
     setPanelOpen(false);
@@ -302,12 +306,13 @@ export function HomeClient({
           <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 justify-end">
             <ExportButton
               filters={{
-                brandId: appliedBrandIds[0] ?? null,
-                departmentId: appliedDepartmentIds[0] ?? null,
-                projectId: appliedProjectIds[0] ?? null,
+                brandIds: appliedBrandIds,
+                departmentIds: appliedDepartmentIds,
+                projectIds: appliedProjectIds,
                 startDate: timelineExportRange?.startDate,
                 endDate: timelineExportRange?.endDate,
               }}
+              filterNames={{ brandIds: appliedBrandNames }}
             />
             {DASHBOARD_FEATURE_ENABLED && hasDashboardAccess && (
               <Button asChild variant="outline" data-testid="open-dashboard-button">

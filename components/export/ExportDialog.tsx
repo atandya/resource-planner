@@ -28,6 +28,11 @@ import {
   type ExportCountStatus,
 } from "@/lib/export/export-count-state";
 import { fetchExportCount } from "@/lib/export/fetch-export-count";
+import {
+  describeAppliedFilters,
+  selectHonoredFilters,
+  type ExportFilterKey,
+} from "@/lib/export/applied-filters";
 
 /** Upper bound on the count pre-flight, so a hung request can't spin forever. */
 const COUNT_TIMEOUT_MS = 15000;
@@ -59,6 +64,8 @@ interface ExportDialogProps {
   onOpenChange: (open: boolean) => void;
   exportOption: ExportOption;
   filters?: ExportFilters & { startDate?: string; endDate?: string };
+  /** Display labels for filter ids, so the panel shows "Acme" rather than "206". */
+  filterNames?: Partial<Record<ExportFilterKey, string[]>>;
 }
 
 export const ExportDialog: React.FC<ExportDialogProps> = ({
@@ -66,6 +73,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   onOpenChange,
   exportOption,
   filters,
+  filterNames,
 }) => {
   const [format, setFormat] = useState<ExportFormat>("csv");
   const [isExporting, setIsExporting] = useState(false);
@@ -96,9 +104,13 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Stable key for the employee filter: the array's identity changes on every
-  // parent render, so the effect below keys off its contents instead.
-  const employeeIdsKey = filters?.employeeIds?.join(",");
+  // Only the filters this export actually applies. Sending the rest would put
+  // params in the URL that the route discards, and would re-count on changes
+  // that cannot move the number.
+  const honoredFilters = selectHonoredFilters(exportOption.type, filters);
+  // Stable key: `filters` gets a new identity on every parent render, so the
+  // effect below keys off the honored contents instead.
+  const honoredFiltersKey = JSON.stringify(honoredFilters);
 
   // Live record count: debounced countOnly pre-flight against the same route
   // and params the export itself uses, so the number can't disagree with the file.
@@ -125,7 +137,11 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
         controller.abort();
       }, COUNT_TIMEOUT_MS);
       try {
-        const count = await fetchExportCount(endpoint, { dateRange, filters }, controller.signal);
+        const count = await fetchExportCount(
+          endpoint,
+          { dateRange, filters: honoredFilters },
+          controller.signal,
+        );
         // A response that resolved just before cleanup must not overwrite the
         // count for a range the user has already moved on from.
         if (controller.signal.aborted) return;
@@ -146,23 +162,12 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
       clearTimeout(timeoutId);
       controller.abort();
     };
-    // `filters` identity changes on every parent render, so depend on its
-    // primitive fields — same reason the range-seeding effect above ignores it.
-    // departmentId/projectId/employeeIds are listed deliberately: the brand
-    // route reads only startDate/endDate/brandIds today, but they are already
-    // in the params both requests share, so a route that starts honouring them
-    // re-counts correctly without anyone remembering to touch this array.
+    // `filters` identity changes on every parent render, so depend on the
+    // serialized honored subset instead — same reason the range-seeding effect
+    // above ignores it. Adding a filter to HONORED_FILTERS for this export type
+    // automatically re-counts on its changes; nobody has to touch this array.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    open,
-    exportOption.type,
-    dateRange.start,
-    dateRange.end,
-    filters?.brandId,
-    filters?.departmentId,
-    filters?.projectId,
-    employeeIdsKey,
-  ]);
+  }, [open, exportOption.type, dateRange.start, dateRange.end, honoredFiltersKey]);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -180,8 +185,9 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
         return;
       }
 
-      // Same builder as the countOnly pre-flight, so count and file agree.
-      const params = buildExportSearchParams({ dateRange, filters });
+      // Same builder and same honored subset as the countOnly pre-flight, so
+      // count and file agree.
+      const params = buildExportSearchParams({ dateRange, filters: honoredFilters });
       params.append("format", format);
 
       // Build API URL
@@ -310,6 +316,12 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     count: recordCount,
   });
 
+  const appliedFilters = describeAppliedFilters({
+    exportType: exportOption.type,
+    filters,
+    names: filterNames,
+  });
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
@@ -421,17 +433,19 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
             </div>
           )}
 
-          {/* Applied Filters */}
-          {filters && (filters.brandId || filters.departmentId || filters.projectId) && (
+          {/* Applied Filters — only the ones this export actually applies. */}
+          {appliedFilters.length > 0 && (
             <div className="rounded-md bg-blue-50 dark:bg-blue-950 p-3">
               <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
                 <Icon icon="lucide:filter" className="h-4 w-4" />
                 <span className="font-medium">Applied Filters</span>
               </div>
               <div className="mt-1 text-xs text-blue-600 dark:text-blue-400">
-                {filters.brandId && <div>Brand: {filters.brandId}</div>}
-                {filters.departmentId && <div>Department: {filters.departmentId}</div>}
-                {filters.projectId && <div>Project: {filters.projectId}</div>}
+                {appliedFilters.map((filter) => (
+                  <div key={filter.key}>
+                    {filter.label}: {filter.value}
+                  </div>
+                ))}
               </div>
             </div>
           )}
