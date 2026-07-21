@@ -23,6 +23,15 @@ export interface ExportCountView {
 }
 
 /**
+ * The brand report's route. Exported because the dialog's real export fetch
+ * targets the same path as the count pre-flight — if this ever moves, both
+ * requests must move with it, and a second literal elsewhere would let the
+ * count silently break (404 → error → banner disappears) while the export
+ * kept working.
+ */
+export const BRAND_EXPORT_ROUTE = "/api/export/brand/excel";
+
+/**
  * The countOnly pre-flight route for an export type, or null when that type
  * has no count endpoint.
  *
@@ -31,7 +40,7 @@ export interface ExportCountView {
  * at another type's route, and adding a second countable type is a single edit.
  */
 export function countEndpointFor(exportType: ExportType): string | null {
-  return exportType === "brand" ? "/api/export/brand/excel" : null;
+  return exportType === "brand" ? BRAND_EXPORT_ROUTE : null;
 }
 
 export function shouldFetchExportCount(input: {

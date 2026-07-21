@@ -21,12 +21,16 @@ import { downloadCsvFile, generateExportFilename } from "@/lib/export/csv-export
 import { downloadExcelFile, generateExcelFilename } from "@/lib/export/excel-export";
 import { buildExportSearchParams, type ExportFilters } from "@/lib/export/export-params";
 import {
+  BRAND_EXPORT_ROUTE,
   countEndpointFor,
   resolveExportCountView,
   shouldFetchExportCount,
   type ExportCountStatus,
 } from "@/lib/export/export-count-state";
 import { fetchExportCount } from "@/lib/export/fetch-export-count";
+
+/** Upper bound on the count pre-flight, so a hung request can't spin forever. */
+const COUNT_TIMEOUT_MS = 15000;
 
 const FORMAT_CHOICES: Array<{
   value: ExportFormat;
@@ -106,8 +110,20 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
       return;
     }
     const controller = new AbortController();
+    // Both paths below abort the same controller, so `aborted` alone cannot say
+    // which happened. A timeout is a genuine failure the user should stop
+    // waiting on; a cleanup abort means this effect is stale and must not write
+    // state at all. This flag is the only thing that tells them apart.
+    let timedOut = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     setCountStatus("loading");
     const timer = setTimeout(async () => {
+      // Started here, not with the debounce, so the budget covers the request
+      // itself rather than being partly eaten by the 400ms wait.
+      timeoutId = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, COUNT_TIMEOUT_MS);
       try {
         const count = await fetchExportCount(endpoint, { dateRange, filters }, controller.signal);
         // A response that resolved just before cleanup must not overwrite the
@@ -116,14 +132,18 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
         setRecordCount(count);
         setCountStatus("ready");
       } catch {
-        if (!controller.signal.aborted) {
+        // Report a timeout as an error; stay silent for a cleanup cancellation.
+        if (timedOut || !controller.signal.aborted) {
           setRecordCount(null);
           setCountStatus("error");
         }
+      } finally {
+        clearTimeout(timeoutId);
       }
     }, 400);
     return () => {
       clearTimeout(timer);
+      clearTimeout(timeoutId);
       controller.abort();
     };
     // `filters` identity changes on every parent render, so depend on its
@@ -175,7 +195,9 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
       } else if (format === "excel" && exportOption.type === "conflicts") {
         apiUrl = `/api/export/conflicts/excel?${params.toString()}`;
       } else if (format === "excel" && exportOption.type === "brand") {
-        apiUrl = `/api/export/brand/excel?${params.toString()}`;
+        // Same route constant the count pre-flight resolves to, so the number
+        // in the dialog and the file it describes can never target different URLs.
+        apiUrl = `${BRAND_EXPORT_ROUTE}?${params.toString()}`;
       } else {
         apiUrl = `/api/export/${exportOption.type}?${params.toString()}`;
       }

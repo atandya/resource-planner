@@ -67,8 +67,9 @@ export async function GET(request: NextRequest) {
     // countOnly=true: pre-flight for the export dialog's live record count.
     // Runs the same fetch + aggregation as the real export, so the count can
     // never disagree with the file. Zero rows is a valid count, not a 404.
+    // Deliberately unlogged: this fires on dialog open and on every debounced
+    // range change, so logging here would bury the one-line-per-export signal below.
     if (searchParams.get('countOnly') === 'true') {
-      console.log('[Export Brand Excel] countOnly pre-flight — rows:', rows.length);
       return NextResponse.json({ count: rows.length });
     }
 
