@@ -184,6 +184,36 @@ describe('buildDetailedReportRows', () => {
     expect(buildDetailedReportRows(input).map((r) => r.plannedHours)).toEqual([10, 20]);
   });
 
+  it('breaks a shared brand name tie on the brand id, deterministically', () => {
+    const input: DetailedReportInput = {
+      ...ABDUL,
+      engagements: [
+        { assignment_uuid: 'a1', employee_uuid: 'e1', project_key: 'campaign:p1' },
+        { assignment_uuid: 'a2', employee_uuid: 'e1', project_key: 'campaign:p2' },
+      ],
+      allocations: [
+        { assignment_uuid: 'a1', month: '2025-09-01', planned_hours: 10 },
+        { assignment_uuid: 'a2', month: '2025-09-01', planned_hours: 20 },
+      ],
+      // Two distinct brands sharing a name, and one shared project name, so
+      // brand and project names both tie. The brand ids run OPPOSITE to the
+      // project keys: b1's project sorts second, so only the brandId tie-break
+      // can produce the expected order — drop that line and this test fails.
+      projects: [
+        { projectKey: 'campaign:p1', brandId: 'b2', name: 'Shared Campaign', sourceType: 'campaign' },
+        { projectKey: 'campaign:p2', brandId: 'b1', name: 'Shared Campaign', sourceType: 'campaign' },
+      ],
+      brands: [
+        { brandId: 'b1', name: 'Abadinusa' },
+        { brandId: 'b2', name: 'Abadinusa' },
+      ],
+    };
+    expect(buildDetailedReportRows(input).map((r) => [r.brand, r.plannedHours])).toEqual([
+      ['Abadinusa', 20], // b1's row, despite its project key sorting last
+      ['Abadinusa', 10],
+    ]);
+  });
+
   it('sorts months ascending across a year boundary', () => {
     const rows = buildDetailedReportRows({
       ...ABDUL,
@@ -253,9 +283,9 @@ describe('buildDetailedReportRows', () => {
     expect(brandRows.map((r) => [`${r.brand}|${r.employee}`, r.totalHours])).toEqual(
       brandRows.map((r) => [`${r.brand}|${r.employee}`, pivot.get(`${r.brand}|${r.employee}`)]),
     );
-    expect([...pivot.entries()].sort()).toEqual([
-      ['AI Rudder|Abdul Gofur', 20],
+    expect([...pivot.entries()].sort((a, b) => a[0].localeCompare(b[0]))).toEqual([
       ['Abadinusa|Abdul Gofur', 40],
+      ['AI Rudder|Abdul Gofur', 20],
     ]);
   });
 });

@@ -5,7 +5,11 @@
  * grain joined to the directory. Plan and adjustment kinds sum invisibly and
  * zero months drop, exactly as the Brand Report does, so a pivot of this report
  * by (brand, employee) reproduces the Brand Report's numbers; reconciliation is
- * structural, not a coincidence to be re-checked each release.
+ * structural, not a coincidence to be re-checked each release. Exact up to
+ * per-row 1-decimal rounding: two 0.05h months pivot to 0.2 here but 0.1 in the
+ * Brand Report, which rounds once after summing. That is deliberate — what a
+ * stakeholder sees in a row is what their own pivot adds up, which is the right
+ * property for a self-service dataset.
  *
  * Sort keys equal column order (Department -> Employee -> Brand -> Project ->
  * Month) so the ordering is self-evident in the sheet; ids tie-break and blank
@@ -173,6 +177,9 @@ export function buildDetailedReportRows(input: DetailedReportInput): DetailedRep
       a.brandId.localeCompare(b.brandId) ||
       a.projectName.localeCompare(b.projectName) ||
       a.projectKey.localeCompare(b.projectKey) ||
+      // Project Type is a column between Project Name and Month, but not a sort
+      // key: it is derived from projectKey, which already tie-breaks above, so
+      // comparing it could never reorder anything.
       a.month.localeCompare(b.month),
   );
 
