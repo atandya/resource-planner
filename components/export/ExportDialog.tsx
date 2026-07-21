@@ -19,6 +19,12 @@ import { CustomRangePicker } from "@/components/timeline-v2/CustomRangePicker";
 import type { ExportOption, ExportFormat } from "./ExportButton";
 import { downloadCsvFile, generateExportFilename } from "@/lib/export/csv-export";
 import { downloadExcelFile, generateExcelFilename } from "@/lib/export/excel-export";
+import { buildExportSearchParams, type ExportFilters } from "@/lib/export/export-params";
+import {
+  resolveExportCountView,
+  shouldFetchExportCount,
+  type ExportCountStatus,
+} from "@/lib/export/export-count-state";
 
 const FORMAT_CHOICES: Array<{
   value: ExportFormat;
@@ -46,14 +52,7 @@ interface ExportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   exportOption: ExportOption;
-  filters?: {
-    brandId?: string | null;
-    departmentId?: string | null;
-    projectId?: string | null;
-    employeeIds?: string[];
-    startDate?: string;
-    endDate?: string;
-  };
+  filters?: ExportFilters & { startDate?: string; endDate?: string };
 }
 
 export const ExportDialog: React.FC<ExportDialogProps> = ({
@@ -66,6 +65,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState("");
   const [recordCount, setRecordCount] = useState<number | null>(null);
+  const [countStatus, setCountStatus] = useState<ExportCountStatus>("idle");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
 
   // Set default format based on what's available
@@ -90,40 +90,67 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // Estimate record count
+  // Stable key for the employee filter: the array's identity changes on every
+  // parent render, so the effect below keys off its contents instead.
+  const employeeIdsKey = filters?.employeeIds?.join(",");
+
+  // Live record count: debounced countOnly pre-flight against the same route
+  // and params the export itself uses, so the number can't disagree with the file.
   useEffect(() => {
-    // This is a rough estimate - actual count would come from API
-    const estimateCount = () => {
-      switch (exportOption.type) {
-        case "assignments":
-          return 100 + Math.floor(Math.random() * 500);
-        case "utilization":
-          return 50 + Math.floor(Math.random() * 100);
-        case "projects":
-          return 20 + Math.floor(Math.random() * 50);
-        case "conflicts":
-          return 5 + Math.floor(Math.random() * 30);
-        default:
-          return 50;
+    if (!shouldFetchExportCount({ open, exportType: exportOption.type, dateRange })) {
+      setRecordCount(null);
+      setCountStatus("idle");
+      return;
+    }
+    const controller = new AbortController();
+    setCountStatus("loading");
+    const timer = setTimeout(async () => {
+      try {
+        const params = buildExportSearchParams({ dateRange, filters });
+        params.append("countOnly", "true");
+        const response = await fetch(`/api/export/brand/excel?${params.toString()}`, {
+          signal: controller.signal,
+        });
+        // Non-200 means the request failed (401/400/500) — never "zero rows",
+        // which the route returns as 200 with { count: 0 }.
+        if (!response.ok) throw new Error(`Count request failed: ${response.status}`);
+        const data = await response.json();
+        // A response that resolved just before cleanup must not overwrite the
+        // count for a range the user has already moved on from.
+        if (controller.signal.aborted) return;
+        setRecordCount(typeof data.count === "number" ? data.count : null);
+        setCountStatus("ready");
+      } catch {
+        if (!controller.signal.aborted) {
+          setRecordCount(null);
+          setCountStatus("error");
+        }
       }
+    }, 400);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
     };
-    setRecordCount(estimateCount());
-  }, [exportOption]);
+    // `filters` identity changes on every parent render, so depend on its
+    // primitive fields — same reason the range-seeding effect above ignores it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    open,
+    exportOption.type,
+    dateRange.start,
+    dateRange.end,
+    filters?.brandId,
+    filters?.departmentId,
+    filters?.projectId,
+    employeeIdsKey,
+  ]);
 
   const handleExport = async () => {
     setIsExporting(true);
     setExportProgress("Initializing export...");
 
     try {
-      // Build query parameters
-      const params = new URLSearchParams();
-      params.append("format", format);
-
-      // Always add date range if available (not just when required)
-      if (dateRange.start && dateRange.end) {
-        params.append("startDate", dateRange.start);
-        params.append("endDate", dateRange.end);
-      } else if (exportOption.requireDateRange) {
+      if (exportOption.requireDateRange && (!dateRange.start || !dateRange.end)) {
         toast({
           variant: "destructive",
           title: "Validation Error",
@@ -134,10 +161,9 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
         return;
       }
 
-      if (filters?.brandId) params.append("brandIds", filters.brandId);
-      if (filters?.departmentId) params.append("departmentIds", filters.departmentId);
-      if (filters?.projectId) params.append("projectIds", filters.projectId);
-      if (filters?.employeeIds?.length) params.append("employeeIds", filters.employeeIds.join(","));
+      // Same builder as the countOnly pre-flight, so count and file agree.
+      const params = buildExportSearchParams({ dateRange, filters });
+      params.append("format", format);
 
       // Build API URL
       let apiUrl: string;
@@ -257,6 +283,12 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     });
   };
 
+  const countView = resolveExportCountView({
+    exportType: exportOption.type,
+    status: countStatus,
+    count: recordCount,
+  });
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
@@ -338,13 +370,30 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           </div>
 
           {/* Record Count */}
-          {recordCount !== null && (
+          {countView.banner && (
             <div className="rounded-md bg-muted p-3">
-              <div className="flex items-center gap-2 text-sm">
-                <Icon icon="lucide:info" className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">
-                  Approximately <span className="font-semibold text-foreground">{recordCount}</span> records will be exported
-                </span>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                {countView.banner.kind === "loading" && (
+                  <>
+                    <Icon icon="lucide:loader-2" className="h-4 w-4 animate-spin" />
+                    <span>Counting records…</span>
+                  </>
+                )}
+                {countView.banner.kind === "empty" && (
+                  <>
+                    <Icon icon="lucide:info" className="h-4 w-4" />
+                    <span>No data in the selected range</span>
+                  </>
+                )}
+                {countView.banner.kind === "count" && (
+                  <>
+                    <Icon icon="lucide:info" className="h-4 w-4" />
+                    <span>
+                      <span className="font-semibold text-foreground">{countView.banner.count}</span>{" "}
+                      records will be exported
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -369,7 +418,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isExporting}>
             Cancel
           </Button>
-          <Button onClick={handleExport} disabled={isExporting}>
+          <Button onClick={handleExport} disabled={isExporting || countView.blocksExport}>
             {isExporting ? (
               <>
                 <Icon icon="lucide:loader-2" className="mr-2 h-4 w-4 animate-spin" />

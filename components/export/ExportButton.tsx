@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ExportDialog } from "./ExportDialog";
+import type { ExportFilters } from "@/lib/export/export-params";
 
 export type ExportType = "assignments" | "utilization" | "projects" | "conflicts" | "brand";
 export type ExportFormat = "csv" | "excel";
@@ -66,14 +67,7 @@ const EXPORT_OPTIONS: ExportOption[] = [
 ];
 
 interface ExportButtonProps {
-  filters?: {
-    brandId?: string | null;
-    departmentId?: string | null;
-    projectId?: string | null;
-    employeeIds?: string[];
-    startDate?: string;
-    endDate?: string;
-  };
+  filters?: ExportFilters & { startDate?: string; endDate?: string };
   disabled?: boolean;
 }
 
