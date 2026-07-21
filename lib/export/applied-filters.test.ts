@@ -27,8 +27,11 @@ describe("honorsFilter", () => {
     expect(honorsFilter("assignments", "projectIds")).toBe(true);
     expect(honorsFilter("assignments", "brandIds")).toBe(false);
 
-    expect(honorsFilter("utilization", "departmentIds")).toBe(true);
     expect(honorsFilter("utilization", "employeeIds")).toBe(true);
+    // The utilization routes parseInt departmentIds while planner department
+    // ids are UUIDs, so the filter matches nothing — claiming it would render
+    // an editor over a dead filter.
+    expect(honorsFilter("utilization", "departmentIds")).toBe(false);
 
     expect(honorsFilter("conflicts", "employeeIds")).toBe(true);
     expect(honorsFilter("conflicts", "brandIds")).toBe(false);
@@ -48,10 +51,7 @@ describe("selectHonoredFilters", () => {
     expect(selectHonoredFilters("conflicts", ALL_FILTERS)).toEqual({ employeeIds: ["e1"] });
     expect(selectHonoredFilters("projects", ALL_FILTERS)).toEqual({ projectIds: ["p1"] });
     expect(selectHonoredFilters("assignments", ALL_FILTERS)).toEqual({ projectIds: ["p1"] });
-    expect(selectHonoredFilters("utilization", ALL_FILTERS)).toEqual({
-      departmentIds: ["d1"],
-      employeeIds: ["e1"],
-    });
+    expect(selectHonoredFilters("utilization", ALL_FILTERS)).toEqual({ employeeIds: ["e1"] });
   });
 
   it("omits empty and blank selections", () => {

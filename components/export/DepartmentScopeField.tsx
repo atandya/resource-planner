@@ -30,13 +30,28 @@ export function DepartmentScopeField({ scope, onApply }: DepartmentScopeFieldPro
 
   // Same cached query the main page already uses, so opening the dialog costs
   // no extra fetch in the common case.
-  const { data: departments = [] } = useDepartments();
+  const departmentsQuery = useDepartments();
+  const departments = useMemo(() => departmentsQuery.data ?? [], [departmentsQuery.data]);
 
   const options: FilterColumnOption[] = useMemo(
     () => departments.map((department) => ({ id: department.id, label: department.name })),
     [departments],
   );
+  const optionById = useMemo(
+    () => new Map(options.map((option) => [option.id, option])),
+    [options],
+  );
   const draftIds = useMemo(() => draft.map((option) => option.id), [draft]);
+
+  // The committed scope is seeded once, from whatever name map the caller had
+  // at that moment — which is empty if the departments query hadn't resolved,
+  // leaving raw ids that rule-C memory would then preserve forever. The catalog
+  // this field already holds is the authority on names, so heal the labels here
+  // rather than trusting the seed. Display only: the draft keeps the raw scope.
+  const displayScope = useMemo(
+    () => scope.map((option) => optionById.get(option.id) ?? option),
+    [scope, optionById],
+  );
 
   const handleOpenChange = (next: boolean) => {
     // Draft re-seeds from the committed scope on every open, so closing
@@ -68,7 +83,7 @@ export function DepartmentScopeField({ scope, onApply }: DepartmentScopeFieldPro
         >
           <span className="truncate">
             {formatScopeSummary({
-              names: scope.map((option) => option.label),
+              names: displayScope.map((option) => option.label),
               allLabel: "All departments",
               countNoun: "departments",
             })}
@@ -95,6 +110,7 @@ export function DepartmentScopeField({ scope, onApply }: DepartmentScopeFieldPro
                 onToggle={handleToggle}
                 search={null}
                 hasQuery
+                isLoading={departmentsQuery.isLoading}
                 noResults="No departments found"
               />
             </div>

@@ -24,6 +24,12 @@ export type ExportFilterKey = keyof ExportFilters;
  * "not implemented" branch in app/api/export/projects/route.ts), so listing it
  * here would make the dialog claim a brand scope the file doesn't have.
  *
+ * `utilization` is the same story with departmentIds: both its routes do
+ * `departmentIds.split(',').map((id) => parseInt(id, 10))`, but planner
+ * department ids are UUIDs, so every parse is NaN and the filter matches
+ * nothing. Listing it would render a Departments picker over a dead filter —
+ * re-add the key if those routes ever compare ids as strings.
+ *
  * A key missing from an entry means that export ignores that filter.
  */
 const HONORED_FILTERS: Record<ExportType, readonly ExportFilterKey[]> = {
@@ -31,7 +37,7 @@ const HONORED_FILTERS: Record<ExportType, readonly ExportFilterKey[]> = {
   detailed: ["brandIds", "departmentIds"],
   projects: ["projectIds"],
   assignments: ["projectIds"],
-  utilization: ["departmentIds", "employeeIds"],
+  utilization: ["employeeIds"],
   conflicts: ["employeeIds"],
 };
 
