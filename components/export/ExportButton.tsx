@@ -15,7 +15,7 @@ import type { ExportFilters } from "@/lib/export/export-params";
 import type { ExportFilterNames } from "@/lib/export/applied-filters";
 
 import type { ExportType } from "@/lib/export/export-types";
-import { BRAND_REPORT_EXPORT_ENABLED } from "@/lib/export/brand-report-flag";
+import { VISIBLE_EXPORT_TYPES } from "@/lib/export/export-visibility";
 
 // Re-exported so existing importers (components/export/index.ts and friends)
 // keep resolving ExportType here, while the union itself lives in lib/.
@@ -70,6 +70,14 @@ const EXPORT_OPTIONS: ExportOption[] = [
     formats: ["excel"],
     requireDateRange: true,
   },
+  {
+    type: "detailed",
+    label: "Detailed Data Report",
+    icon: "lucide:table",
+    description: "Planned hours per employee, project and month",
+    formats: ["excel"],
+    requireDateRange: true,
+  },
 ];
 
 interface ExportButtonProps {
@@ -79,11 +87,11 @@ interface ExportButtonProps {
   disabled?: boolean;
 }
 
-// The Brand Report is parked behind its flag while it's iterated on; the four
-// other options are unaffected. Filtered here, not in EXPORT_OPTIONS, so the
-// option definition survives for the flip back to true.
-const VISIBLE_EXPORT_OPTIONS = EXPORT_OPTIONS.filter(
-  (option) => option.type !== "brand" || BRAND_REPORT_EXPORT_ENABLED
+// Only the types in VISIBLE_EXPORT_TYPES appear in the menu; the rest are
+// parked. Filtered here, not in EXPORT_OPTIONS, so every option definition
+// survives for a one-line revival.
+const VISIBLE_EXPORT_OPTIONS = EXPORT_OPTIONS.filter((option) =>
+  VISIBLE_EXPORT_TYPES.includes(option.type)
 );
 
 export const ExportButton: React.FC<ExportButtonProps> = ({ filters, filterNames, disabled }) => {

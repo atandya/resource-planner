@@ -11,7 +11,8 @@ const RANGE = { start: "2026-07-01", end: "2026-07-31" };
 const UNCOUNTABLE: ExportType[] = ["assignments", "utilization", "projects", "conflicts"];
 
 describe("countEndpointFor", () => {
-  it("returns the brand route for the only countable export type", () => {
+  it("returns each countable export type's own endpoint", () => {
+    expect(countEndpointFor("detailed")).toBe("/api/export/detailed/excel");
     expect(countEndpointFor("brand")).toBe("/api/export/brand/excel");
   });
 

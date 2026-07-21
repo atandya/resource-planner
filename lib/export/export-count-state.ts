@@ -31,16 +31,24 @@ export interface ExportCountView {
  */
 export const BRAND_EXPORT_ROUTE = "/api/export/brand/excel";
 
+/** The detailed data report's route — same rationale as BRAND_EXPORT_ROUTE. */
+export const DETAILED_EXPORT_ROUTE = "/api/export/detailed/excel";
+
+const COUNT_ENDPOINTS: Partial<Record<ExportType, string>> = {
+  brand: BRAND_EXPORT_ROUTE,
+  detailed: DETAILED_EXPORT_ROUTE,
+};
+
 /**
  * The countOnly pre-flight route for an export type, or null when that type
  * has no count endpoint.
  *
  * Whether a type can be counted and where its count comes from are the same
- * decision, so they are one function: a countable type cannot end up pointing
+ * decision, so they are one map: a countable type cannot end up pointing
  * at another type's route, and adding a second countable type is a single edit.
  */
 export function countEndpointFor(exportType: ExportType): string | null {
-  return exportType === "brand" ? BRAND_EXPORT_ROUTE : null;
+  return COUNT_ENDPOINTS[exportType] ?? null;
 }
 
 export function shouldFetchExportCount(input: {

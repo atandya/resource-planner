@@ -1,9 +1,10 @@
 /**
  * Which filters each export actually honors, and how to label them.
  *
- * The export routes don't all read the same params: the Brand Report filters on
- * brandIds and ignores departmentIds/projectIds entirely, while Conflicts reads
- * only employeeIds. Rendering an editor for every timeline filter would
+ * The export routes don't all read the same params: the Brand Report and the
+ * Detailed Data Report filter on brandIds and departmentIds and ignore
+ * projectIds entirely, while Conflicts reads only employeeIds. Rendering an
+ * editor for every timeline filter would
  * overstate the scope — it tells the user a filter is applied when the route
  * throws it away, so the dialog's scope fields render only for honored keys.
  *
@@ -26,7 +27,8 @@ export type ExportFilterKey = keyof ExportFilters;
  * A key missing from an entry means that export ignores that filter.
  */
 const HONORED_FILTERS: Record<ExportType, readonly ExportFilterKey[]> = {
-  brand: ["brandIds"],
+  brand: ["brandIds", "departmentIds"],
+  detailed: ["brandIds", "departmentIds"],
   projects: ["projectIds"],
   assignments: ["projectIds"],
   utilization: ["departmentIds", "employeeIds"],

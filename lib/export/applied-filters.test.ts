@@ -11,9 +11,12 @@ const ALL_FILTERS = {
 describe("honorsFilter", () => {
   it("matches what each export route actually reads", () => {
     expect(honorsFilter("brand", "brandIds")).toBe(true);
-    // The brand route reads only startDate/endDate/brandIds.
-    expect(honorsFilter("brand", "departmentIds")).toBe(false);
+    expect(honorsFilter("brand", "departmentIds")).toBe(true);
     expect(honorsFilter("brand", "projectIds")).toBe(false);
+
+    expect(honorsFilter("detailed", "brandIds")).toBe(true);
+    expect(honorsFilter("detailed", "departmentIds")).toBe(true);
+    expect(honorsFilter("detailed", "projectIds")).toBe(false);
 
     expect(honorsFilter("projects", "projectIds")).toBe(true);
     // The projects routes parse brandIds and then discard it — see the
@@ -34,7 +37,14 @@ describe("honorsFilter", () => {
 
 describe("selectHonoredFilters", () => {
   it("keeps only what the export will apply", () => {
-    expect(selectHonoredFilters("brand", ALL_FILTERS)).toEqual({ brandIds: ["b1", "b2"] });
+    expect(selectHonoredFilters("brand", ALL_FILTERS)).toEqual({
+      brandIds: ["b1", "b2"],
+      departmentIds: ["d1"],
+    });
+    expect(selectHonoredFilters("detailed", ALL_FILTERS)).toEqual({
+      brandIds: ["b1", "b2"],
+      departmentIds: ["d1"],
+    });
     expect(selectHonoredFilters("conflicts", ALL_FILTERS)).toEqual({ employeeIds: ["e1"] });
     expect(selectHonoredFilters("projects", ALL_FILTERS)).toEqual({ projectIds: ["p1"] });
     expect(selectHonoredFilters("assignments", ALL_FILTERS)).toEqual({ projectIds: ["p1"] });

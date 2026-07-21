@@ -8,4 +8,4 @@
  * rename silently disable features that switch on it.
  */
 
-export type ExportType = "assignments" | "utilization" | "projects" | "conflicts" | "brand";
+export type ExportType = "assignments" | "utilization" | "projects" | "conflicts" | "brand" | "detailed";
