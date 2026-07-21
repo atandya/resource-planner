@@ -38,6 +38,10 @@ interface ProjectInput {
 interface EmployeeInput {
   employeeUuid: string;
   fullName: string;
+  // The employee's CURRENT department — the only department hook the data has,
+  // and the one the department filter reads. The model has no history, so an
+  // employee who moved mid-range is filtered by where they sit today.
+  departmentId?: string | null;
 }
 
 interface BrandInput {
@@ -54,6 +58,9 @@ export interface BrandReportInput {
   employees: readonly EmployeeInput[];
   brands: readonly BrandInput[];
   brandIdFilter?: string[] | null;
+  // Empty array or null/absent = no filter, i.e. everyone. When active,
+  // employees with no department are excluded.
+  departmentIdFilter?: string[] | null;
 }
 
 interface Bucket {
@@ -72,6 +79,10 @@ export function buildBrandReportRows(input: BrandReportInput): BrandReportRow[] 
   const { engagements, allocations, projects, employees, brands } = input;
   const brandIdFilter =
     input.brandIdFilter && input.brandIdFilter.length ? new Set(input.brandIdFilter) : null;
+  const departmentIdFilter =
+    input.departmentIdFilter && input.departmentIdFilter.length
+      ? new Set(input.departmentIdFilter)
+      : null;
 
   const projectByKey = new Map(projects.map((p) => [p.projectKey, p]));
   const employeeByUuid = new Map(employees.map((e) => [e.employeeUuid, e]));
@@ -93,6 +104,10 @@ export function buildBrandReportRows(input: BrandReportInput): BrandReportRow[] 
     const project = projectByKey.get(engagement.project_key);
     if (brandIdFilter && (!project?.brandId || !brandIdFilter.has(project.brandId))) {
       continue;
+    }
+    if (departmentIdFilter) {
+      const employeeDept = employeeByUuid.get(engagement.employee_uuid)?.departmentId;
+      if (!employeeDept || !departmentIdFilter.has(employeeDept)) continue;
     }
     // project_key is "<sourceType>:<id>", so the prefix is the fallback.
     const type = project?.sourceType || engagement.project_key.split(':')[0] || 'unknown';

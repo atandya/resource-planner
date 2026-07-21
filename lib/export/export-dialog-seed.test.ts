@@ -3,6 +3,7 @@ import { shouldReseed, type ExportDialogSeed } from "./export-dialog-seed";
 
 const SEED: ExportDialogSeed = {
   brandIds: ["b1", "b2"],
+  departmentIds: ["d1"],
   startDate: "2026-07-01",
   endDate: "2026-09-30",
 };
@@ -21,13 +22,27 @@ describe("shouldReseed", () => {
     expect(shouldReseed({ incomingSeed: { ...SEED, brandIds: [] }, lastAppliedSeed: SEED })).toBe(true);
   });
 
+  it("reseeds when the department selection changed", () => {
+    expect(shouldReseed({ incomingSeed: { ...SEED, departmentIds: ["d2"] }, lastAppliedSeed: SEED })).toBe(true);
+    expect(shouldReseed({ incomingSeed: { ...SEED, departmentIds: [] }, lastAppliedSeed: SEED })).toBe(true);
+  });
+
+  it("does not reseed when departments are unchanged", () => {
+    expect(shouldReseed({ incomingSeed: { ...SEED, departmentIds: ["d1"] }, lastAppliedSeed: SEED })).toBe(false);
+  });
+
   it("reseeds when the date range changed", () => {
     expect(shouldReseed({ incomingSeed: { ...SEED, endDate: "2026-12-31" }, lastAppliedSeed: SEED })).toBe(true);
   });
 
   it("treats absent and undefined dates alike", () => {
-    const bare: ExportDialogSeed = { brandIds: [] };
-    expect(shouldReseed({ incomingSeed: { brandIds: [], startDate: undefined }, lastAppliedSeed: bare })).toBe(false);
+    const bare: ExportDialogSeed = { brandIds: [], departmentIds: [] };
+    expect(
+      shouldReseed({
+        incomingSeed: { brandIds: [], departmentIds: [], startDate: undefined },
+        lastAppliedSeed: bare,
+      }),
+    ).toBe(false);
   });
 
   // Order-sensitive by design: both sides come from the same source

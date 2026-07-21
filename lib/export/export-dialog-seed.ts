@@ -7,6 +7,7 @@
 
 export interface ExportDialogSeed {
   brandIds: string[];
+  departmentIds: string[];
   startDate?: string;
   endDate?: string;
 }
@@ -14,6 +15,7 @@ export interface ExportDialogSeed {
 function normalize(seed: ExportDialogSeed): string {
   return JSON.stringify({
     brandIds: seed.brandIds,
+    departmentIds: seed.departmentIds,
     startDate: seed.startDate ?? "",
     endDate: seed.endDate ?? "",
   });

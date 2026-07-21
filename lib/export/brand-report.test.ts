@@ -79,6 +79,56 @@ describe('buildBrandReportRows', () => {
     ]);
   });
 
+  // Departments hang off the EMPLOYEE — the only department hook the data has.
+  // An employee with no department is excluded whenever a filter is active
+  // (the "(No department)" virtual option was consciously rejected).
+  const departmentFixture = (
+    departmentIdFilter: BrandReportInput['departmentIdFilter'],
+  ): BrandReportInput => ({
+    engagements: [
+      { assignment_uuid: 'a1', employee_uuid: 'e1', project_key: 'campaign:p1' },
+      { assignment_uuid: 'a2', employee_uuid: 'e2', project_key: 'campaign:p1' },
+      { assignment_uuid: 'a3', employee_uuid: 'e3', project_key: 'campaign:p1' },
+    ],
+    allocations: [
+      { assignment_uuid: 'a1', planned_hours: 10 },
+      { assignment_uuid: 'a2', planned_hours: 20 },
+      { assignment_uuid: 'a3', planned_hours: 30 },
+    ],
+    projects: [{ projectKey: 'campaign:p1', brandId: 'b1', brandName: 'BAF', sourceType: 'campaign' }],
+    employees: [
+      { employeeUuid: 'e1', fullName: 'Andi', departmentId: 'd1' },
+      { employeeUuid: 'e2', fullName: 'Budi', departmentId: 'd2' },
+      { employeeUuid: 'e3', fullName: 'Citra', departmentId: null },
+    ],
+    brands: [{ brandId: 'b1', name: 'BAF' }],
+    departmentIdFilter,
+  });
+
+  it("honors the department id filter, by the employee's department", () => {
+    expect(buildBrandReportRows(departmentFixture(['d1']))).toEqual([
+      { brand: 'BAF', employee: 'Andi', campaignHours: 10, pitchHours: 0, otherHours: 0, totalHours: 10 },
+    ]);
+  });
+
+  it('includes everyone — departmentless employees too — when no department filter is set', () => {
+    expect(buildBrandReportRows(departmentFixture(null)).map((r) => r.employee)).toEqual([
+      'Andi',
+      'Budi',
+      'Citra',
+    ]);
+    expect(buildBrandReportRows(departmentFixture(undefined)).map((r) => r.employee)).toEqual([
+      'Andi',
+      'Budi',
+      'Citra',
+    ]);
+    expect(buildBrandReportRows(departmentFixture([])).map((r) => r.employee)).toEqual([
+      'Andi',
+      'Budi',
+      'Citra',
+    ]);
+  });
+
   it('keeps totalHours equal to the sum of the rounded per-type columns', () => {
     const input: BrandReportInput = {
       engagements: [
