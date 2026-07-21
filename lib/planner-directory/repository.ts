@@ -721,7 +721,9 @@ export function createPlannerDirectoryRepository(options: PlannerDirectoryReposi
     return readRows<DbRow>(result).map(mapBrandReadRow);
   }
 
-  async function listBrands(options?: DirectoryReadOptions): Promise<PlannerDirectoryBrandRow[]> {
+  // readonly: cached reads hand every caller the same array instance, so an
+  // in-place sort/push by one consumer would corrupt it for the whole isolate.
+  async function listBrands(options?: DirectoryReadOptions): Promise<readonly PlannerDirectoryBrandRow[]> {
     return brandsCache.read(options);
   }
 
@@ -771,12 +773,8 @@ export function createPlannerDirectoryRepository(options: PlannerDirectoryReposi
     return readRows<DbRow>(result).map(mapProjectReadRow);
   }
 
-  async function listProjects(options?: DirectoryReadOptions): Promise<PlannerDirectoryProjectRow[]> {
+  async function listProjects(options?: DirectoryReadOptions): Promise<readonly PlannerDirectoryProjectRow[]> {
     return projectsCache.read(options);
-  }
-
-  async function listEmployees(options?: DirectoryReadOptions): Promise<PlannerDirectoryEmployeeRow[]> {
-    return employeesCache.read(options);
   }
 
   async function loadEmployees(): Promise<PlannerDirectoryEmployeeRow[]> {
@@ -802,6 +800,10 @@ export function createPlannerDirectoryRepository(options: PlannerDirectoryReposi
       lastSeenAt: String(row.last_seen_at ?? ""),
       archivedAt: row.archived_at ? String(row.archived_at) : null,
     }));
+  }
+
+  async function listEmployees(options?: DirectoryReadOptions): Promise<readonly PlannerDirectoryEmployeeRow[]> {
+    return employeesCache.read(options);
   }
 
   // EXISTS over one assignment table for the brand/project employee scoping —

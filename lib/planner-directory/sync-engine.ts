@@ -111,13 +111,13 @@ function filterChangedDepartments(
   return incoming.filter((row) => existingById.get(row.departmentId)?.sourceHash !== row.sourceHash);
 }
 
-function filterChangedBrands(existing: PlannerDirectoryBrandRow[], incoming: PlannerDirectoryBrandRow[]): PlannerDirectoryBrandRow[] {
+function filterChangedBrands(existing: readonly PlannerDirectoryBrandRow[], incoming: PlannerDirectoryBrandRow[]): PlannerDirectoryBrandRow[] {
   const existingById = new Map(existing.map((row) => [row.brandId, row]));
   return incoming.filter((row) => existingById.get(row.brandId)?.sourceHash !== row.sourceHash);
 }
 
 function filterChangedProjects(
-  existing: PlannerDirectoryProjectRow[],
+  existing: readonly PlannerDirectoryProjectRow[],
   incoming: PlannerDirectoryProjectRow[]
 ): PlannerDirectoryProjectRow[] {
   const existingById = new Map(existing.map((row) => [row.projectKey, row]));
@@ -125,7 +125,7 @@ function filterChangedProjects(
 }
 
 function filterChangedEmployees(
-  existing: PlannerDirectoryEmployeeRow[],
+  existing: readonly PlannerDirectoryEmployeeRow[],
   incoming: PlannerDirectoryEmployeeRow[]
 ): PlannerDirectoryEmployeeRow[] {
   const existingById = new Map(existing.map((row) => [row.employeeUuid, row]));

@@ -97,6 +97,50 @@ describe("createTtlMemo", () => {
     expect(load).toHaveBeenCalledTimes(2);
   });
 
+  it("does not republish an in-flight snapshot that invalidate superseded", async () => {
+    const clock = createClock();
+    const deferred: Array<(rows: string[]) => void> = [];
+    const load = vi.fn(() => new Promise<string[]>((resolve) => deferred.push(resolve)));
+    const memo = createTtlMemo(load, { ttlMs: 1_000, now: clock.now });
+
+    // Read starts before a write, invalidate lands mid-flight, read resolves after.
+    const inFlight = memo.read();
+    memo.invalidate();
+    const afterWrite = memo.read();
+    deferred[0]?.(["pre-write"]);
+    deferred[1]?.(["post-write"]);
+
+    expect(await inFlight).toEqual(["pre-write"]);
+    // The caller that arrived after the write must not get the pre-write snapshot.
+    expect(await afterWrite).toEqual(["post-write"]);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("a late rejection does not evict a newer successful entry", async () => {
+    const clock = createClock();
+    const rejecters: Array<(error: Error) => void> = [];
+    const resolvers: Array<(rows: string[]) => void> = [];
+    const load = vi.fn(
+      () => new Promise<string[]>((resolve, reject) => {
+        resolvers.push(resolve);
+        rejecters.push(reject);
+      }),
+    );
+    const memo = createTtlMemo(load, { ttlMs: 1_000, now: clock.now });
+
+    const doomed = memo.read();
+    memo.invalidate();
+    const replacement = memo.read();
+    resolvers[1]?.(["fresh"]);
+    await replacement;
+    // The stale read fails only after the replacement entry is already cached.
+    rejecters[0]?.(new Error("connection lost"));
+    await expect(doomed).rejects.toThrow("connection lost");
+
+    expect(await memo.read()).toEqual(["fresh"]);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
   it("bypass does not populate the cache", async () => {
     const clock = createClock();
     const load = vi.fn(async () => ["a"]);

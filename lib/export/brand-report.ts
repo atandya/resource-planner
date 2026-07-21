@@ -46,11 +46,13 @@ interface BrandInput {
 }
 
 export interface BrandReportInput {
-  engagements: EngagementInput[];
-  allocations: AllocationInput[];
-  projects: ProjectInput[];
-  employees: EmployeeInput[];
-  brands: BrandInput[];
+  engagements: readonly EngagementInput[];
+  allocations: readonly AllocationInput[];
+  // readonly: the directory rows arrive from a shared cache, so this must not
+  // mutate them. It only reads — the one sort below is on a locally built array.
+  projects: readonly ProjectInput[];
+  employees: readonly EmployeeInput[];
+  brands: readonly BrandInput[];
   brandIdFilter?: string[] | null;
 }
 
