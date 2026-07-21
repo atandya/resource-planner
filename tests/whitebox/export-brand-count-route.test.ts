@@ -10,7 +10,10 @@ describe("brand export route — countOnly pre-flight", () => {
   });
 
   it("answers countOnly before the empty-result 404 and before Excel rendering", () => {
-    const countIdx = route.indexOf("countOnly");
+    // Anchor on the `if` statement itself, not the preceding comment — a
+    // comment left behind after the code moves would otherwise let this
+    // assertion pass while the branch order regressed.
+    const countIdx = route.indexOf("searchParams.get('countOnly')");
     const notFoundIdx = route.indexOf("status: 404");
     const excelCallIdx = route.indexOf("exportBrandReportToExcel(rows)");
     expect(countIdx).toBeGreaterThan(-1);
