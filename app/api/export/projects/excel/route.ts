@@ -31,6 +31,8 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
+    // Read but not applied — same limitation as the CSV variant, and likewise
+    // omitted from this export's entry in lib/export/applied-filters.ts.
     const brandIds = searchParams.get('brandIds');
     const projectIds = searchParams.get('projectIds');
     const groupByBrand = searchParams.get('groupByBrand') !== 'false';

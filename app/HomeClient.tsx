@@ -121,7 +121,10 @@ export function HomeClient({
   const [appliedDepartmentIds, setAppliedDepartmentIds] = useState<string[]>([]);
 
   const appliedBrandIds = useMemo(() => appliedBrands.map((b) => b.id), [appliedBrands]);
-  const appliedBrandNames = useMemo(() => appliedBrands.map((b) => b.name), [appliedBrands]);
+  const appliedBrandNames = useMemo(
+    () => ({ brandIds: Object.fromEntries(appliedBrands.map((b) => [b.id, b.name])) }),
+    [appliedBrands]
+  );
 
   const [draftBrands, setDraftBrands] = useState<Brand[]>([]);
   const [draftProjects, setDraftProjects] = useState<ProjectOption[]>([]);
@@ -312,7 +315,7 @@ export function HomeClient({
                 startDate: timelineExportRange?.startDate,
                 endDate: timelineExportRange?.endDate,
               }}
-              filterNames={{ brandIds: appliedBrandNames }}
+              filterNames={appliedBrandNames}
             />
             {DASHBOARD_FEATURE_ENABLED && hasDashboardAccess && (
               <Button asChild variant="outline" data-testid="open-dashboard-button">

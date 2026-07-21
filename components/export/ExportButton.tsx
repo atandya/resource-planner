@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ExportDialog } from "./ExportDialog";
 import type { ExportFilters } from "@/lib/export/export-params";
-import type { ExportFilterKey } from "@/lib/export/applied-filters";
+import type { ExportFilterNames } from "@/lib/export/applied-filters";
 
 import type { ExportType } from "@/lib/export/export-types";
 
@@ -74,7 +74,7 @@ const EXPORT_OPTIONS: ExportOption[] = [
 interface ExportButtonProps {
   filters?: ExportFilters & { startDate?: string; endDate?: string };
   /** Display labels for filter ids, passed through to the dialog's filter panel. */
-  filterNames?: Partial<Record<ExportFilterKey, string[]>>;
+  filterNames?: ExportFilterNames;
   disabled?: boolean;
 }
 

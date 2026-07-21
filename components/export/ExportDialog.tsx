@@ -31,7 +31,7 @@ import { fetchExportCount } from "@/lib/export/fetch-export-count";
 import {
   describeAppliedFilters,
   selectHonoredFilters,
-  type ExportFilterKey,
+  type ExportFilterNames,
 } from "@/lib/export/applied-filters";
 
 /** Upper bound on the count pre-flight, so a hung request can't spin forever. */
@@ -65,7 +65,7 @@ interface ExportDialogProps {
   exportOption: ExportOption;
   filters?: ExportFilters & { startDate?: string; endDate?: string };
   /** Display labels for filter ids, so the panel shows "Acme" rather than "206". */
-  filterNames?: Partial<Record<ExportFilterKey, string[]>>;
+  filterNames?: ExportFilterNames;
 }
 
 export const ExportDialog: React.FC<ExportDialogProps> = ({

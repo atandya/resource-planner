@@ -14,15 +14,20 @@
 import type { ExportType } from "./export-types";
 import type { ExportFilters } from "./export-params";
 
-export type ExportFilterKey = "brandIds" | "departmentIds" | "projectIds" | "employeeIds";
+/** Derived from ExportFilters so a new filter can't be silently dropped here. */
+export type ExportFilterKey = keyof ExportFilters;
 
 /**
- * Mirrors the `searchParams.get(...)` calls in each app/api/export/* route.
- * A route missing a key here means it genuinely ignores that param.
+ * What each app/api/export/* route actually APPLIES — which is not the same as
+ * what it reads. `projects` parses brandIds and then discards it (see the
+ * "not implemented" branch in app/api/export/projects/route.ts), so listing it
+ * here would make the dialog claim a brand scope the file doesn't have.
+ *
+ * A key missing from an entry means that export ignores that filter.
  */
 const HONORED_FILTERS: Record<ExportType, readonly ExportFilterKey[]> = {
   brand: ["brandIds"],
-  projects: ["brandIds", "projectIds"],
+  projects: ["projectIds"],
   assignments: ["projectIds"],
   utilization: ["departmentIds", "employeeIds"],
   conflicts: ["employeeIds"],
@@ -55,28 +60,30 @@ export type AppliedFilterDescription = {
   value: string;
 };
 
+/** Display names keyed by filter id, so nothing depends on array positions. */
+export type ExportFilterNames = Partial<Record<ExportFilterKey, Record<string, string>>>;
+
 /**
  * Human-readable lines for the dialog's applied-filters panel.
  *
- * `names` supplies display labels where the caller has them (ids like "206" mean
- * nothing to a user); anything unnamed falls back to a plain count so the panel
- * never prints a raw id list.
+ * `names` maps id → label where the caller has them (ids like "206" mean nothing
+ * to a user). Lookup is by id rather than by position, so a partial map can
+ * never pair a value with someone else's name; anything unnamed falls back to a
+ * plain count rather than printing raw ids.
  */
 export function describeAppliedFilters(input: {
   exportType: ExportType;
   filters?: ExportFilters;
-  names?: Partial<Record<ExportFilterKey, string[]>>;
+  names?: ExportFilterNames;
 }): AppliedFilterDescription[] {
   const honored = selectHonoredFilters(input.exportType, input.filters);
 
   return (Object.keys(honored) as ExportFilterKey[]).map((key) => {
     const values = honored[key] ?? [];
-    const names = input.names?.[key]?.filter(Boolean) ?? [];
+    const lookup = input.names?.[key];
+    const named = values.map((id) => lookup?.[id]).filter((name): name is string => Boolean(name));
     const label = values.length === 1 ? FILTER_LABELS[key].one : FILTER_LABELS[key].many;
-    const value =
-      names.length === values.length && names.length > 0
-        ? names.join(", ")
-        : `${values.length} selected`;
+    const value = named.length === values.length ? named.join(", ") : `${values.length} selected`;
     return { key, label, value };
   });
 }
