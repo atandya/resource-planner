@@ -15,6 +15,7 @@ import type { ExportFilters } from "@/lib/export/export-params";
 import type { ExportFilterNames } from "@/lib/export/applied-filters";
 
 import type { ExportType } from "@/lib/export/export-types";
+import { BRAND_REPORT_EXPORT_ENABLED } from "@/lib/export/brand-report-flag";
 
 // Re-exported so existing importers (components/export/index.ts and friends)
 // keep resolving ExportType here, while the union itself lives in lib/.
@@ -78,6 +79,13 @@ interface ExportButtonProps {
   disabled?: boolean;
 }
 
+// The Brand Report is parked behind its flag while it's iterated on; the four
+// other options are unaffected. Filtered here, not in EXPORT_OPTIONS, so the
+// option definition survives for the flip back to true.
+const VISIBLE_EXPORT_OPTIONS = EXPORT_OPTIONS.filter(
+  (option) => option.type !== "brand" || BRAND_REPORT_EXPORT_ENABLED
+);
+
 export const ExportButton: React.FC<ExportButtonProps> = ({ filters, filterNames, disabled }) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedExport, setSelectedExport] = useState<ExportOption | null>(null);
@@ -103,7 +111,7 @@ export const ExportButton: React.FC<ExportButtonProps> = ({ filters, filterNames
             <p className="text-xs text-muted-foreground">Choose report type and format</p>
           </div>
           <DropdownMenuSeparator />
-          {EXPORT_OPTIONS.map((option) => (
+          {VISIBLE_EXPORT_OPTIONS.map((option) => (
             <DropdownMenuItem
               key={option.type}
               onClick={() => handleExportClick(option)}
