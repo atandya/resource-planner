@@ -7,6 +7,7 @@ import ExcelJS from 'exceljs';
 import { ResourceCapacityAnalysis } from '@/lib/analysis/types';
 import type { ProjectExportData } from './csv-export';
 import type { BrandReportRow } from './brand-report';
+import type { DetailedReportRow } from './detailed-report';
 
 // ============================================================================
 // Excel Styling Constants
@@ -1294,6 +1295,79 @@ export async function exportBrandReportToExcel(rows: BrandReportRow[]): Promise<
   worksheet.autoFilter = {
     from: { row: 1, column: 1 },
     to: { row: worksheet.rowCount, column: lastColumn },
+  };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+
+// ============================================================================
+// Detailed Data Report Excel Export
+// ============================================================================
+
+/**
+ * Export the Detailed Data Report: one sheet, one row per
+ * (employee, project, month) —
+ * Department | Employee | Brand | Project Name | Project Type | Month | Planned Hours.
+ * Rows arrive pre-sorted and pre-rounded from buildDetailedReportRows.
+ *
+ * Deliberately NO totals row: this is a semi-raw dataset meant to be filtered
+ * and pivoted, and a totals row silently corrupts every one of those.
+ */
+export async function exportDetailedReportToExcel(rows: DetailedReportRow[]): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Resource Planner';
+  workbook.created = new Date();
+
+  const worksheet = workbook.addWorksheet('Detailed Data', { views: [{ state: 'frozen', ySplit: 1 }] });
+
+  const headerRow = worksheet.addRow([
+    'Department',
+    'Employee',
+    'Brand',
+    'Project Name',
+    'Project Type',
+    'Month',
+    'Planned Hours',
+  ]);
+  applyHeaderStyle(headerRow, HEADER_STYLE);
+
+  // Hours are rounded to 1 decimal upstream, so format to 1 decimal rather than
+  // the file-wide 2-decimal default (matches the Brand Report sheet).
+  const hoursStyle = { ...NUMBER_CELL_STYLE, numFmt: '#,##0.0' };
+  const monthStyle = { ...CELL_STYLE, numFmt: 'mmm yyyy' };
+
+  for (const row of rows) {
+    // Month is a REAL date, not text: Excel then sorts, date-filters and
+    // pivot-groups it correctly across a year boundary (Oct 2025 -> Jan 2026),
+    // which text months cannot do. Built with Date.UTC because ExcelJS
+    // serializes the UTC instant — a local-time constructor would land on the
+    // last day of the previous month for any server east of Greenwich.
+    const [year, month] = row.month.split('-').map(Number);
+    const monthDate = new Date(Date.UTC(year, month - 1, 1));
+
+    const dataRow = worksheet.addRow([
+      row.department,
+      row.employee,
+      row.brand,
+      row.projectName,
+      row.projectType,
+      monthDate,
+      row.plannedHours,
+    ]);
+    applyRowStyle(dataRow, CELL_STYLE);
+    // "Oct 2025" on screen, a date underneath.
+    dataRow.getCell(6).style = monthStyle;
+    dataRow.getCell(7).style = hoursStyle;
+  }
+
+  setColumnWidths(worksheet, [22, 26, 24, 32, 14, 12, 14]);
+
+  // Header-row filter dropdowns (Excel AutoFilter; Google Sheets imports it as
+  // an applied filter) so users can sort/filter each column on open.
+  worksheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: worksheet.rowCount, column: 7 },
   };
 
   const buffer = await workbook.xlsx.writeBuffer();
