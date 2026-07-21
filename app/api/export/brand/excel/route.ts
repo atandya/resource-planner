@@ -66,6 +66,13 @@ export async function GET(request: NextRequest) {
 
     console.log('[Export Brand Excel] Engagements:', engagements.length, 'rows:', rows.length);
 
+    // countOnly=true: pre-flight for the export dialog's live record count.
+    // Runs the same fetch + aggregation as the real export, so the count can
+    // never disagree with the file. Zero rows is a valid count, not a 404.
+    if (searchParams.get('countOnly') === 'true') {
+      return NextResponse.json({ count: rows.length });
+    }
+
     if (rows.length === 0) {
       return NextResponse.json(
         { error: 'No brand report data found for the selected criteria.' },
