@@ -55,7 +55,7 @@ describe("ExportDialog — live record count", () => {
   });
 
   it("sends only the filters the chosen export honors, to both the count and the file", () => {
-    expect(dialog).toContain("selectHonoredFilters(exportOption.type, filters)");
+    expect(dialog).toContain("selectHonoredFilters(exportOption.type,");
     expect(dialog).toContain("filters: honoredFilters");
     // The count must re-fire on honored-filter changes only, and must not read
     // the singular fields that used to truncate a multi-select to its first id.
@@ -65,9 +65,24 @@ describe("ExportDialog — live record count", () => {
     expect(dialog).not.toContain("filters?.projectId,");
   });
 
-  it("renders the applied-filter panel from the pure describer", () => {
-    expect(dialog).toContain("describeAppliedFilters");
-    // Raw ids were previously printed straight into the panel.
-    expect(dialog).not.toContain("Brand: {filters.brandId}");
+  it("replaces the read-only filter panel with the editable scope field", () => {
+    expect(dialog).toContain("BrandScopeField");
+    expect(dialog).not.toContain("describeAppliedFilters");
+    expect(dialog).not.toContain("Applied Filters");
+    // The field renders only for exports that honor brands — never a control
+    // for a filter the route discards.
+    expect(dialog).toContain('honorsFilter(exportOption.type, "brandIds")');
+  });
+
+  it("seeds under rule C: reopen keeps edits until the timeline context changes", () => {
+    expect(dialog).toContain("shouldReseed");
+    expect(dialog).toContain("lastAppliedSeed");
+    // One rule for the whole dialog: the SAME effect seeds dates and brands.
+    expect(dialog).toContain("setDateRange");
+    expect(dialog).toContain("setScopeBrands");
+  });
+
+  it("derives the export's brandIds from dialog-local scope", () => {
+    expect(dialog).toContain("scopeBrands.map((option) => option.id)");
   });
 });

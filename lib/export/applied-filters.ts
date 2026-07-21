@@ -1,14 +1,14 @@
 /**
- * Which filters each export actually honors, and how to describe them.
+ * Which filters each export actually honors, and how to label them.
  *
  * The export routes don't all read the same params: the Brand Report filters on
  * brandIds and ignores departmentIds/projectIds entirely, while Conflicts reads
- * only employeeIds. Listing every active timeline filter in the dialog therefore
- * overstates the scope — it tells the user a filter is applied when the route
- * throws it away.
+ * only employeeIds. Rendering an editor for every timeline filter would
+ * overstate the scope — it tells the user a filter is applied when the route
+ * throws it away, so the dialog's scope fields render only for honored keys.
  *
  * Keeping this beside the query builder means the dialog never has to know which
- * route reads what.
+ * route reads what. FILTER_LABELS supplies the scope fields' form labels.
  */
 
 import type { ExportType } from "./export-types";
@@ -33,7 +33,7 @@ const HONORED_FILTERS: Record<ExportType, readonly ExportFilterKey[]> = {
   conflicts: ["employeeIds"],
 };
 
-const FILTER_LABELS: Record<ExportFilterKey, { one: string; many: string }> = {
+export const FILTER_LABELS: Record<ExportFilterKey, { one: string; many: string }> = {
   brandIds: { one: "Brand", many: "Brands" },
   departmentIds: { one: "Department", many: "Departments" },
   projectIds: { one: "Project", many: "Projects" },
@@ -54,36 +54,5 @@ export function selectHonoredFilters(exportType: ExportType, filters?: ExportFil
   return honored;
 }
 
-export type AppliedFilterDescription = {
-  key: ExportFilterKey;
-  label: string;
-  value: string;
-};
-
 /** Display names keyed by filter id, so nothing depends on array positions. */
 export type ExportFilterNames = Partial<Record<ExportFilterKey, Record<string, string>>>;
-
-/**
- * Human-readable lines for the dialog's applied-filters panel.
- *
- * `names` maps id → label where the caller has them (ids like "206" mean nothing
- * to a user). Lookup is by id rather than by position, so a partial map can
- * never pair a value with someone else's name; anything unnamed falls back to a
- * plain count rather than printing raw ids.
- */
-export function describeAppliedFilters(input: {
-  exportType: ExportType;
-  filters?: ExportFilters;
-  names?: ExportFilterNames;
-}): AppliedFilterDescription[] {
-  const honored = selectHonoredFilters(input.exportType, input.filters);
-
-  return (Object.keys(honored) as ExportFilterKey[]).map((key) => {
-    const values = honored[key] ?? [];
-    const lookup = input.names?.[key];
-    const named = values.map((id) => lookup?.[id]).filter((name): name is string => Boolean(name));
-    const label = values.length === 1 ? FILTER_LABELS[key].one : FILTER_LABELS[key].many;
-    const value = named.length === values.length ? named.join(", ") : `${values.length} selected`;
-    return { key, label, value };
-  });
-}

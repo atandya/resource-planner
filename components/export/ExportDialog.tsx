@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { endOfMonth, format as formatDateFns, startOfMonth } from "date-fns";
 import { Icon } from "@iconify/react";
 import {
@@ -29,10 +29,14 @@ import {
 } from "@/lib/export/export-count-state";
 import { fetchExportCount } from "@/lib/export/fetch-export-count";
 import {
-  describeAppliedFilters,
+  honorsFilter,
   selectHonoredFilters,
+  FILTER_LABELS,
   type ExportFilterNames,
 } from "@/lib/export/applied-filters";
+import { BrandScopeField } from "./BrandScopeField";
+import type { FilterColumnOption } from "@/components/filters/FilterColumn";
+import { shouldReseed, type ExportDialogSeed } from "@/lib/export/export-dialog-seed";
 
 /** Upper bound on the count pre-flight, so a hung request can't spin forever. */
 const COUNT_TIMEOUT_MS = 15000;
@@ -64,7 +68,7 @@ interface ExportDialogProps {
   onOpenChange: (open: boolean) => void;
   exportOption: ExportOption;
   filters?: ExportFilters & { startDate?: string; endDate?: string };
-  /** Display labels for filter ids, so the panel shows "Acme" rather than "206". */
+  /** Display labels for filter ids, so the seeded scope shows "Acme" rather than "206". */
   filterNames?: ExportFilterNames;
 }
 
@@ -81,6 +85,8 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   const [recordCount, setRecordCount] = useState<number | null>(null);
   const [countStatus, setCountStatus] = useState<ExportCountStatus>("idle");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
+  const [scopeBrands, setScopeBrands] = useState<FilterColumnOption[]>([]);
+  const lastAppliedSeed = useRef<ExportDialogSeed | null>(null);
 
   // Set default format based on what's available
   useEffect(() => {
@@ -89,27 +95,60 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     }
   }, [exportOption, format]);
 
-  // Seed the date range only when the dialog opens. The timeline default
-  // arrives via filters, whose identity changes on every parent render —
-  // re-seeding on those changes would clobber a range the user picked here.
+  // Rule C: dialog edits (scope AND dates) survive close/reopen, and re-seed
+  // from the timeline only when its contribution changed since last applied.
+  // This replaces the old always-reseed-on-open rule so both fields share one
+  // memory model. The dialog stays mounted after close (ExportButton renders
+  // on selectedExport, not open), which is what makes persistence work.
   useEffect(() => {
     if (!open) return;
+    const incomingSeed: ExportDialogSeed = {
+      brandIds: filters?.brandIds ?? [],
+      startDate: filters?.startDate,
+      endDate: filters?.endDate,
+    };
+    if (!shouldReseed({ incomingSeed, lastAppliedSeed: lastAppliedSeed.current })) return;
+    lastAppliedSeed.current = incomingSeed;
+
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     setDateRange({
-      start: filters?.startDate || monthStart.toISOString().split('T')[0],
-      end: filters?.endDate || monthEnd.toISOString().split('T')[0],
+      start: incomingSeed.startDate || monthStart.toISOString().split("T")[0],
+      end: incomingSeed.endDate || monthEnd.toISOString().split("T")[0],
     });
+    const nameById = filterNames?.brandIds ?? {};
+    setScopeBrands(incomingSeed.brandIds.map((id) => ({ id, label: nameById[id] ?? id })));
+    // Seed inputs are read fresh on each open; comparing inside the effect is
+    // the point, so `open` is the only dependency (same as before).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Only the filters this export actually applies. Sending the rest would put
   // params in the URL that the route discards, and would re-count on changes
   // that cannot move the number.
-  const honoredFilters = selectHonoredFilters(exportOption.type, filters);
-  // Stable key: `filters` gets a new identity on every parent render, so the
-  // effect below keys off the honored contents instead.
+  const honoredFilters = useMemo(
+    () =>
+      selectHonoredFilters(exportOption.type, {
+        ...filters,
+        // brandIds comes from dialog-local scope, not the timeline prop: the
+        // scope field's Apply is the source of truth once the dialog has seeded.
+        brandIds: scopeBrands.map((option) => option.id),
+      }),
+    // `filters` gets a new identity on every parent render; its inner arrays
+    // are the stable pieces this derivation can actually consume, so depend on
+    // those (brandIds is overridden by scopeBrands and deliberately absent).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      exportOption.type,
+      scopeBrands,
+      filters?.departmentIds,
+      filters?.projectIds,
+      filters?.employeeIds,
+    ],
+  );
+  // Stable key: cheap to derive from the memoized object, and the count effect
+  // below keys off the honored contents instead of `filters` identity.
   const honoredFiltersKey = JSON.stringify(honoredFilters);
 
   // Live record count: debounced countOnly pre-flight against the same route
@@ -316,12 +355,6 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     count: recordCount,
   });
 
-  const appliedFilters = describeAppliedFilters({
-    exportType: exportOption.type,
-    filters,
-    names: filterNames,
-  });
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
@@ -367,6 +400,16 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
                   <Icon icon="lucide:calendar" className="h-4 w-4 text-muted-foreground" />
                 </Button>
               </CustomRangePicker>
+            </div>
+          )}
+
+          {/* Editable scope — rendered only for filters this export honors. */}
+          {honorsFilter(exportOption.type, "brandIds") && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                {FILTER_LABELS.brandIds.many}
+              </Label>
+              <BrandScopeField scope={scopeBrands} onApply={setScopeBrands} />
             </div>
           )}
 
@@ -433,22 +476,6 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
             </div>
           )}
 
-          {/* Applied Filters — only the ones this export actually applies. */}
-          {appliedFilters.length > 0 && (
-            <div className="rounded-md bg-blue-50 dark:bg-blue-950 p-3">
-              <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
-                <Icon icon="lucide:filter" className="h-4 w-4" />
-                <span className="font-medium">Applied Filters</span>
-              </div>
-              <div className="mt-1 text-xs text-blue-600 dark:text-blue-400">
-                {appliedFilters.map((filter) => (
-                  <div key={filter.key}>
-                    {filter.label}: {filter.value}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
 
         <DialogFooter>
