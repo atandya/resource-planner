@@ -3,6 +3,12 @@ import type { MySqlBrand, MySqlCampaign, MySqlPitch } from "@/lib/types/mysql";
 type TimetrackFetch = typeof fetch;
 type RestrictedEntity = "brand" | "pitch" | "campaign";
 
+const restrictedEntityPaths: Record<RestrictedEntity, string> = {
+  brand: "brands",
+  pitch: "pitches",
+  campaign: "campaigns",
+};
+
 function restrictedBaseUrl(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/resource-planner`;
 }
@@ -15,7 +21,7 @@ async function fetchRestrictedEntity<T>(args: {
   fetchImpl: TimetrackFetch;
 }): Promise<T | null> {
   const response = await args.fetchImpl(
-    `${restrictedBaseUrl(args.baseUrl)}/${args.entity}s/${encodeURIComponent(args.uuid)}`,
+    `${restrictedBaseUrl(args.baseUrl)}/${restrictedEntityPaths[args.entity]}/${encodeURIComponent(args.uuid)}`,
     {
       headers: { Authorization: `Bearer ${args.token}`, Accept: "application/json" },
       cache: "no-store",

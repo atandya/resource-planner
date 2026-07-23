@@ -25,6 +25,19 @@ describe("createTimetrackServiceSource", () => {
     );
   });
 
+  it("fetches a pitch through the correctly pluralized restricted read endpoint", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse({ data: { uuid: "pitch-uuid", pitch_name: "New Pitch", status: "Introduction" } })
+    );
+    const source = createTimetrackServiceSource({ token, baseUrl, fetchImpl });
+
+    await expect(source.fetchPitchByUuid("pitch-uuid")).resolves.toMatchObject({ uuid: "pitch-uuid" });
+    expect(fetchImpl).toHaveBeenCalledWith(
+      `${baseUrl}/resource-planner/pitches/pitch-uuid`,
+      expect.anything()
+    );
+  });
+
   it("falls back to the default URL when TIMETRACK_API_URL is empty", async () => {
     const previousBaseUrl = process.env.TIMETRACK_API_URL;
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ data: { uuid: "brand-uuid" } }));
