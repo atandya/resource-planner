@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { GET } from "@/app/api/export/brand/excel/route";
 import { buildBrandReportRows } from "@/lib/export/brand-report";
@@ -106,6 +106,10 @@ describe("brand export route — handler behavior", () => {
     mocks.getCurrentEmployeeUUID.mockResolvedValue(null);
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("countOnly=true with no engagements returns {count: 0} without rendering Excel", async () => {
     mocks.getEngagements.mockResolvedValue({ engagements: [], allocations: [] });
     mockEmptyDirectory();
@@ -199,10 +203,12 @@ describe("brand export route — handler behavior", () => {
     mockFixtureDirectory();
     mocks.exportBrandReportToExcel.mockResolvedValue(Buffer.from("fake-xlsx"));
     mocks.generateExcelFilename.mockReturnValue("brand-report-2026-01-01-2026-01-31.xlsx");
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     const response = await GET(request("startDate=2026-01-01&endDate=2026-01-31"));
 
     expect(response.status).toBe(200);
+    expect(logSpy).not.toHaveBeenCalled();
     expect(response.headers.get("Content-Type")).toBe(
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import { GET } from "@/app/api/export/detailed/excel/route";
 import { buildDetailedReportRows } from "@/lib/export/detailed-report";
@@ -125,6 +125,10 @@ describe("detailed export route — handler behavior", () => {
     mocks.getCurrentEmployeeUUID.mockResolvedValue(null);
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("countOnly=true with no engagements returns {count: 0} without rendering Excel", async () => {
     mocks.getEngagements.mockResolvedValue({ engagements: [], allocations: [] });
     mockEmptyDirectory();
@@ -186,10 +190,12 @@ describe("detailed export route — handler behavior", () => {
     mocks.generateExcelFilename.mockReturnValue(
       "detailed-data-report-2025-10-01-to-2026-01-31.xlsx"
     );
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
     const response = await GET(request("startDate=2025-10-01&endDate=2026-01-31"));
 
     expect(response.status).toBe(200);
+    expect(logSpy).not.toHaveBeenCalled();
     expect(response.headers.get("Content-Type")).toBe(
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     );

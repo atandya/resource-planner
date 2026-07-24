@@ -87,8 +87,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ count: rows.length });
     }
 
-    console.log('[Export Detailed Excel] Engagements:', engagements.length, 'rows:', rows.length);
-
     if (rows.length === 0) {
       return NextResponse.json(
         { error: 'No detailed report data found for the selected criteria.' },
