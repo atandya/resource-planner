@@ -16,7 +16,7 @@ export type TimetrackWebhookRouteDependencies = {
   signingSecret: string;
   inbox: {
     claim(event: TimetrackPlannerWebhookEvent): Promise<TimetrackWebhookClaim>;
-    complete(eventId: string, processingToken: string): Promise<void>;
+    complete(eventId: string, processingToken: string): Promise<boolean>;
     fail(eventId: string, processingToken: string, message: string): Promise<void>;
   };
   process(event: TimetrackPlannerWebhookEvent): Promise<void>;
@@ -59,7 +59,10 @@ export async function handleTimetrackPlannerWebhook(
     if (claim.status === "processing") return Response.json({ error: "Event is processing" }, { status: 409 });
     try {
       await dependencies.process(event);
-      await dependencies.inbox.complete(event.eventId, claim.processingToken);
+      const completed = await dependencies.inbox.complete(event.eventId, claim.processingToken);
+      if (!completed) {
+        throw new Error("TimeTrack webhook inbox lease was superseded before completion");
+      }
       return new Response(null, { status: 204 });
     } catch (error) {
       await dependencies.inbox.fail(event.eventId, claim.processingToken, safeErrorMessage(error));

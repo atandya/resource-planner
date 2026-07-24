@@ -41,7 +41,7 @@ function baseDeps() {
     signingSecret: secret,
     inbox: {
       claim: vi.fn().mockResolvedValue({ status: "claimed", processingToken: "claim-token" }),
-      complete: vi.fn().mockResolvedValue(undefined),
+      complete: vi.fn().mockResolvedValue(true),
       fail: vi.fn().mockResolvedValue(undefined),
     },
     process: vi.fn().mockResolvedValue(undefined),
@@ -99,6 +99,22 @@ describe("handleTimetrackPlannerWebhook", () => {
     await expect(response.json()).resolves.toEqual({ error: "TimeTrack event processing failed" });
     expect(dependencies.inbox.fail).toHaveBeenCalledWith(eventId, "claim-token", expect.any(String));
     expect(dependencies.inbox.complete).not.toHaveBeenCalled();
+  });
+
+  it("marks the event failed and returns 500 when completion is superseded", async () => {
+    const dependencies = deps({
+      inbox: {
+        claim: vi.fn().mockResolvedValue({ status: "claimed", processingToken: "expired-token" }),
+        complete: vi.fn().mockResolvedValue(false),
+        fail: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+    const response = await handleTimetrackPlannerWebhook(await signedRequest(), dependencies);
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({ error: "TimeTrack event processing failed" });
+    expect(dependencies.process).toHaveBeenCalledTimes(1);
+    expect(dependencies.inbox.fail).toHaveBeenCalledWith(eventId, "expired-token", expect.any(String));
   });
 
   it("returns 401 and never claims when the signature is invalid", async () => {
