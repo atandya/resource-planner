@@ -78,6 +78,20 @@ function readFirstRow<T>(result: unknown): T | null {
   return rows[0] ?? null;
 }
 
+function affectedRows(result: unknown): number {
+  if (!Array.isArray(result)) {
+    return 0;
+  }
+
+  const updateHeader = result[0];
+  if (!updateHeader || typeof updateHeader !== "object") {
+    return 0;
+  }
+
+  const value = (updateHeader as { affectedRows?: unknown }).affectedRows;
+  return typeof value === "number" ? value : 0;
+}
+
 export function createTimetrackWebhookInbox(options: TimetrackWebhookInboxOptions = {}) {
   const db = options.db ?? DEFAULT_DB;
   const now = options.now ?? defaultNow;
@@ -139,12 +153,15 @@ export function createTimetrackWebhookInbox(options: TimetrackWebhookInboxOption
     return { status: "processing" };
   }
 
-  async function complete(eventId: string, processingToken: string): Promise<void> {
+  async function complete(eventId: string, processingToken: string): Promise<boolean> {
     const sql =
       dialect === "postgresql"
-        ? `UPDATE planner_timetrack_webhook_inbox SET status='completed', completed_at=$1, last_error=NULL, processing_token=NULL WHERE event_id=$2 AND status='processing' AND processing_token=$3`
+        ? `UPDATE planner_timetrack_webhook_inbox SET status='completed', completed_at=$1, last_error=NULL, processing_token=NULL WHERE event_id=$2 AND status='processing' AND processing_token=$3 RETURNING event_id`
         : `UPDATE planner_timetrack_webhook_inbox SET status='completed', completed_at=?, last_error=NULL, processing_token=NULL WHERE event_id=? AND status='processing' AND processing_token=?`;
-    await db.query(sql, [now(), eventId, processingToken]);
+    const result = await db.query(sql, [now(), eventId, processingToken]);
+    return dialect === "postgresql"
+      ? readFirstRow<{ event_id: string }>(result) !== null
+      : affectedRows(result) === 1;
   }
 
   async function fail(eventId: string, processingToken: string, message: string): Promise<void> {

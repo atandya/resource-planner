@@ -1,6 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createTimetrackWebhookInbox } from "@/lib/planner-directory/timetrack-webhook-inbox";
 import type { TimetrackPlannerWebhookEvent } from "@/lib/planner-directory/timetrack-webhook";
+
+const dbClient = vi.hoisted(() => ({ current: "postgresql" }));
+
+vi.mock("@/lib/mysql-assignments/db", () => ({
+  assignmentsDb: {},
+  getDbClient: () => dbClient.current,
+}));
 
 type InboxRow = {
   event_id: string;
@@ -88,6 +95,7 @@ function createStatefulDb() {
         row.completed_at = completedAt;
         row.last_error = null;
         row.processing_token = null;
+        return [[{ event_id: eventId }]];
       }
       return [[]];
     }
@@ -110,6 +118,10 @@ function createStatefulDb() {
 }
 
 describe("timetrack webhook inbox", () => {
+  beforeEach(() => {
+    dbClient.current = "postgresql";
+  });
+
   it("claims a new event once, completes it, and treats its redelivery as completed", async () => {
     const { query } = createStatefulDb();
     const inbox = createTimetrackWebhookInbox({ db: { query }, now: () => "2026-07-13T10:00:00.000Z" });
@@ -118,7 +130,7 @@ describe("timetrack webhook inbox", () => {
     expect(claim.status).toBe("claimed");
     if (claim.status !== "claimed") throw new Error("expected initial claim");
 
-    await inbox.complete(event.eventId, claim.processingToken);
+    await expect(inbox.complete(event.eventId, claim.processingToken)).resolves.toBe(true);
     await expect(inbox.claim(event)).resolves.toEqual({ status: "completed" });
   });
 
@@ -173,10 +185,26 @@ describe("timetrack webhook inbox", () => {
     const second = await inbox.claim(event);
     if (second.status !== "claimed") throw new Error("expected stale reclaim");
 
-    await inbox.complete(event.eventId, first.processingToken);
+    await expect(inbox.complete(event.eventId, first.processingToken)).resolves.toBe(false);
     expect(rows.get(event.eventId)?.status).toBe("processing");
-    await inbox.complete(event.eventId, second.processingToken);
+    await expect(inbox.complete(event.eventId, second.processingToken)).resolves.toBe(true);
     expect(rows.get(event.eventId)?.status).toBe("completed");
+  });
+
+  it("uses MySQL affectedRows to report whether completion matched the lease", async () => {
+    dbClient.current = "mysql";
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce([{ affectedRows: 1 }])
+      .mockResolvedValueOnce([{ affectedRows: 0 }]);
+    const inbox = createTimetrackWebhookInbox({
+      db: { query },
+      now: () => "2026-07-13T10:00:00.000Z",
+    });
+
+    await expect(inbox.complete(event.eventId, "matching-token")).resolves.toBe(true);
+    await expect(inbox.complete(event.eventId, "nonmatching-token")).resolves.toBe(false);
+    expect(query.mock.calls.every(([sql]) => !String(sql).includes("RETURNING"))).toBe(true);
   });
 
   it("does not let an expired lease fail a newer claim", async () => {
