@@ -54,6 +54,10 @@ describe("ExportDialog — live record count", () => {
     expect(dialog).toContain("countView.blocksExport");
   });
 
+  it("does not log normal export progress from the dialog", () => {
+    expect(dialog).not.toContain("console.log");
+  });
+
   it("sends only the filters the chosen export honors, to both the count and the file", () => {
     expect(dialog).toContain("selectHonoredFilters(exportOption.type,");
     expect(dialog).toContain("filters: honoredFilters");

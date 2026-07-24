@@ -14,11 +14,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { useToast, toast } from "@/hooks/use-toast";
+import { toast } from "@/hooks/use-toast";
 import { CustomRangePicker } from "@/components/timeline-v2/CustomRangePicker";
 import type { ExportOption, ExportFormat } from "./ExportButton";
 import { downloadCsvFile, generateExportFilename } from "@/lib/export/csv-export";
-import { downloadExcelFile, generateExcelFilename } from "@/lib/export/excel-export";
+import { downloadExcelFile } from "@/lib/export/excel-export";
 import { buildExportSearchParams, type ExportFilters } from "@/lib/export/export-params";
 import {
   BRAND_EXPORT_ROUTE,
@@ -61,7 +61,7 @@ const FORMAT_CHOICES: Array<{
     label: "Excel",
     description: "Multi-sheet with formatting",
     icon: "lucide:file-spreadsheet",
-    iconClassName: "text-green-600",
+    iconClassName: "text-muted-foreground",
   },
 ];
 
@@ -262,8 +262,6 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
         apiUrl = `/api/export/${exportOption.type}?${params.toString()}`;
       }
 
-      // Fetch export data with better progress tracking
-      console.log('[Export Dialog] Fetching from:', apiUrl);
       setExportProgress("Fetching data from database...");
 
       // Add timeout to prevent hanging - different timeouts for different export types
@@ -274,9 +272,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
 
       let response;
       try {
-        console.log('[Export Dialog] Starting fetch:', apiUrl);
         response = await fetch(apiUrl, { signal: controller.signal });
-        console.log('[Export Dialog] Response status:', response.status, 'ok:', response.ok, 'content-type:', response.headers.get('content-type'));
       } catch (fetchError) {
         clearTimeout(timeoutId);
         if (fetchError instanceof Error && fetchError.name === 'AbortError') {

@@ -128,7 +128,7 @@ export const ExportButton: React.FC<ExportButtonProps> = ({ filters, filterNames
               <div className="flex items-center w-full">
                 <Icon icon={option.icon} className="mr-2 h-4 w-4" />
                 <span className="font-medium">{option.label}</span>
-                <span className="ml-auto text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
+                <span className="ml-auto rounded bg-secondary px-1.5 py-0.5 text-[10px] text-secondary-foreground">
                   {option.formats.map((f) => (f === "excel" ? "XLSX" : "CSV")).join(" + ")}
                 </span>
               </div>
