@@ -29,25 +29,24 @@ export type TimetrackWebhookHandlerDependencies = {
   now: () => string;
 };
 
-// Prefer explicit is_active; else fall back to today's TimeTrack shape.
-function isBrandActive(b: MySqlBrand): boolean {
-  if (typeof b.is_active === "boolean") return b.is_active;
-  return b.flag !== "inactive";
+function requiredIsActive(
+  entity: MySqlBrand | MySqlPitch | MySqlCampaign,
+  entityName: "brand" | "pitch" | "campaign"
+): boolean {
+  if (typeof entity.is_active !== "boolean") {
+    throw new Error(`TimeTrack ${entityName} response is missing required is_active`);
+  }
+  return entity.is_active;
 }
 
-function isCampaignActive(c: MySqlCampaign): boolean {
-  if (typeof c.is_active === "boolean") return c.is_active;
-  return c.flag !== "inactive" && c.state !== "archive";
-}
-
-function isPitchActive(p: MySqlPitch): boolean {
-  if (typeof p.is_active === "boolean") return p.is_active;
-  // pitch win/loss are outcomes, not archival; only an explicit is_active===false archives
-  return true;
-}
-
-function referencedBrandUuid(project: MySqlPitch | MySqlCampaign): string | null {
-  return project.brand_uuid ?? project.brand?.uuid ?? null;
+function requiredBrandUuid(
+  project: MySqlPitch | MySqlCampaign,
+  entityName: "pitch" | "campaign"
+): string {
+  if (typeof project.brand_uuid !== "string" || project.brand_uuid.trim().length === 0) {
+    throw new Error(`TimeTrack ${entityName} response is missing required brand_uuid`);
+  }
+  return project.brand_uuid;
 }
 
 export async function processTimetrackPlannerWebhook(
@@ -68,7 +67,11 @@ export async function processTimetrackPlannerWebhook(
 
   if (event.entityType === "brand") {
     const brand = await dependencies.source.fetchBrandByUuid(event.entityUuid);
-    if (!brand || !isBrandActive(brand)) {
+    if (!brand) {
+      await dependencies.repository.archiveBrandBySourceUuid(event.entityUuid, archivedAt);
+      return;
+    }
+    if (!requiredIsActive(brand, "brand")) {
       await dependencies.repository.archiveBrandBySourceUuid(event.entityUuid, archivedAt);
       return;
     }
@@ -84,22 +87,18 @@ export async function processTimetrackPlannerWebhook(
     entityType === "pitch"
       ? await dependencies.source.fetchPitchByUuid(event.entityUuid)
       : await dependencies.source.fetchCampaignByUuid(event.entityUuid);
-  const active =
-    entityType === "pitch"
-      ? project
-        ? isPitchActive(project as MySqlPitch)
-        : false
-      : project
-        ? isCampaignActive(project as MySqlCampaign)
-        : false;
-  if (!project || !active) {
+  if (!project) {
+    await dependencies.repository.archiveProjectBySource(entityType, event.entityUuid, archivedAt);
+    return;
+  }
+  if (!requiredIsActive(project, entityType)) {
     await dependencies.repository.archiveProjectBySource(entityType, event.entityUuid, archivedAt);
     return;
   }
 
   // Synchronize the referenced brand BEFORE the project row.
-  const brandUuid = referencedBrandUuid(project);
-  if (brandUuid) await upsertReferencedBrand(brandUuid, dependencies);
+  const brandUuid = requiredBrandUuid(project, entityType);
+  await upsertReferencedBrand(brandUuid, dependencies);
 
   const normalized = normalizeProjectSource(project, entityType);
   if (!normalized) throw new Error("TimeTrack project is missing its UUID");
@@ -112,7 +111,7 @@ async function upsertReferencedBrand(
 ): Promise<void> {
   const brand = await dependencies.source.fetchBrandByUuid(brandUuid);
   // Do not archive the brand as a side-effect of a project event; just skip.
-  if (!brand || !isBrandActive(brand)) return;
+  if (!brand || !requiredIsActive(brand, "brand")) return;
   const normalized = normalizeBrandSource(brand);
   if (normalized) await dependencies.repository.upsertBrands([normalized]);
 }

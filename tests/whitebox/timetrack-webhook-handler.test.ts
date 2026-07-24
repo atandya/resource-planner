@@ -12,6 +12,7 @@ function makeBrand(overrides: Partial<MySqlBrand> = {}): MySqlBrand {
     brand_name: "Acme Brand",
     company_name: "Acme Inc",
     flag: "active",
+    is_active: true,
     updated_at: "2026-07-12T00:00:00.000Z",
     ...overrides,
   } as MySqlBrand;
@@ -24,6 +25,7 @@ function makePitch(overrides: Partial<MySqlPitch> = {}): MySqlPitch {
     brand_id: 9,
     brand_uuid: "brand-9-uuid",
     status: "on_going",
+    is_active: true,
     updated_at: "2026-07-12T00:00:00.000Z",
     ...overrides,
   } as MySqlPitch;
@@ -37,6 +39,7 @@ function makeCampaign(overrides: Partial<MySqlCampaign> = {}): MySqlCampaign {
     brand_uuid: "brand-9-uuid",
     flag: "active",
     state: "publish",
+    is_active: true,
     start_date: "2026-07-01",
     end_date: "2026-08-01",
     updated_at: "2026-07-12T00:00:00.000Z",
@@ -157,16 +160,15 @@ describe("processTimetrackPlannerWebhook", () => {
     );
   });
 
-  it("archives an upserted brand whose fetched record is flag:inactive (no is_active)", async () => {
-    deps.source.fetchBrandByUuid.mockResolvedValue(makeBrand({ flag: "inactive" }));
+  it("rejects a brand response missing is_active without repository writes", async () => {
+    deps.source.fetchBrandByUuid.mockResolvedValue(makeBrand({ is_active: undefined }));
 
-    await processTimetrackPlannerWebhook(brandUpsertEvent, deps);
-
-    expect(deps.repository.archiveBrandBySourceUuid).toHaveBeenCalledWith(
-      brandUpsertEvent.entityUuid,
-      now()
+    await expect(processTimetrackPlannerWebhook(brandUpsertEvent, deps)).rejects.toThrow(
+      "TimeTrack brand response is missing required is_active"
     );
+
     expect(deps.repository.upsertBrands).not.toHaveBeenCalled();
+    expect(deps.repository.archiveBrandBySourceUuid).not.toHaveBeenCalled();
   });
 
   it("archives an upserted brand with explicit is_active:false even when flag is active", async () => {
@@ -183,17 +185,27 @@ describe("processTimetrackPlannerWebhook", () => {
     expect(deps.repository.upsertBrands).not.toHaveBeenCalled();
   });
 
-  it("archives an upserted campaign whose state is archive", async () => {
-    deps.source.fetchCampaignByUuid.mockResolvedValue(makeCampaign({ state: "archive" }));
+  it("rejects a pitch response missing is_active without repository writes", async () => {
+    deps.source.fetchPitchByUuid.mockResolvedValue(makePitch({ is_active: undefined }));
 
-    await processTimetrackPlannerWebhook(campaignUpsertEvent, deps);
-
-    expect(deps.repository.archiveProjectBySource).toHaveBeenCalledWith(
-      "campaign",
-      campaignUpsertEvent.entityUuid,
-      now()
+    await expect(processTimetrackPlannerWebhook(pitchUpsertEvent, deps)).rejects.toThrow(
+      "TimeTrack pitch response is missing required is_active"
     );
+
     expect(deps.repository.upsertProjects).not.toHaveBeenCalled();
+    expect(deps.repository.archiveProjectBySource).not.toHaveBeenCalled();
+  });
+
+  it("rejects an active campaign response missing brand_uuid before repository writes", async () => {
+    deps.source.fetchCampaignByUuid.mockResolvedValue(makeCampaign({ brand_uuid: undefined }));
+
+    await expect(processTimetrackPlannerWebhook(campaignUpsertEvent, deps)).rejects.toThrow(
+      "TimeTrack campaign response is missing required brand_uuid"
+    );
+
+    expect(deps.repository.upsertBrands).not.toHaveBeenCalled();
+    expect(deps.repository.upsertProjects).not.toHaveBeenCalled();
+    expect(deps.repository.archiveProjectBySource).not.toHaveBeenCalled();
   });
 
   it("upserts an active campaign after first upserting its referenced brand", async () => {
@@ -215,7 +227,7 @@ describe("processTimetrackPlannerWebhook", () => {
   });
 
   it("does not archive the referenced brand as a side-effect when the project brand is inactive", async () => {
-    deps.source.fetchBrandByUuid.mockResolvedValue(makeBrand({ flag: "inactive" }));
+    deps.source.fetchBrandByUuid.mockResolvedValue(makeBrand({ is_active: false }));
 
     await processTimetrackPlannerWebhook(pitchUpsertEvent, deps);
 
