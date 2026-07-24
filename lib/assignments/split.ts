@@ -1,4 +1,4 @@
-import { eachMonthOfInterval, format, isValid, startOfDay, startOfMonth } from "date-fns";
+import { eachMonthOfInterval, endOfMonth, format, isValid, startOfDay, startOfMonth } from "date-fns";
 import type { DateRange } from "react-day-picker";
 
 export type MonthHours = { month: string /* yyyy-MM-01 */; plannedHours: number };
@@ -111,12 +111,32 @@ export function countAssignmentWorkingDays(range: { startDate: string; endDate: 
   return countWeekdaysInclusive(parseDateLike(range.startDate), parseDateLike(range.endDate));
 }
 
-/** Default span for enrolling someone on a project: the project's own start/end when
- *  both are known, otherwise today through one month out. */
+/** The canonical span for planning a pitch: the full calendar month of its
+ *  submit date. Shared by single-assign defaults and bulk-assign so the two
+ *  paths can't drift. */
+export function getPitchSubmitMonthSpan(submitDate: string | Date): { startDate: string; endDate: string } {
+  const d = parseDateLike(submitDate instanceof Date ? submitDate : String(submitDate));
+  return {
+    startDate: format(startOfMonth(d), "yyyy-MM-dd"),
+    endDate: format(endOfMonth(d), "yyyy-MM-dd"),
+  };
+}
+
+/** Default span for enrolling someone on a project: a pitch spans exactly the
+ *  month of its submit date; otherwise the project's own start/end when both
+ *  are known, otherwise today through one month out. */
 export function getDefaultAssignmentRange(
-  project: { startDate?: string | null; endDate?: string | null },
+  project: {
+    startDate?: string | null;
+    endDate?: string | null;
+    projectType?: "pitch" | "campaign";
+    submitDate?: string | null;
+  },
   today: Date = new Date(),
 ): { startDate: string; endDate: string } {
+  if (project.projectType === "pitch" && project.submitDate) {
+    return getPitchSubmitMonthSpan(project.submitDate);
+  }
   const startDate = toDateInputValue(project.startDate);
   const endDate = toDateInputValue(project.endDate);
   if (startDate && endDate) return { startDate, endDate };

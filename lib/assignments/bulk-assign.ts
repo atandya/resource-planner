@@ -1,22 +1,22 @@
 import type { ProjectOption } from "@/lib/query/hooks/useProjects";
 import type { UpsertBody } from "@/lib/query/hooks/useAssignmentCommands";
-import { parseManHoursInput, fillMonthsWithValue, toDateInputValue } from "./split";
+import { parseManHoursInput, fillMonthsWithValue, toDateInputValue, getPitchSubmitMonthSpan } from "./split";
 
 export type AssignSpan = { startDate: string; endDate: string };
 
 /** Derive a date span from a project.
  *  - campaign: use startDate + endDate when BOTH are present, else null.
- *  - pitch: ProjectOption carries no submitDate, so use startDate as a single-day
- *    span when present, else null.
+ *  - pitch: the submit month via getPitchSubmitMonthSpan (same span the
+ *    single-assign default uses), else null when there's no submitDate.
  *
- *  Both dates are coerced through toDateInputValue so verbose driver strings
+ *  Campaign dates are coerced through toDateInputValue so verbose driver strings
  *  ("Wed Jun 18 2025 00:00:00 GMT+0700 (...)") become strict "yyyy-MM-dd". The
  *  downstream fillMonthsWithValue parses with `new Date(`${date}T00:00:00`)`,
  *  which yields Invalid Date — rejected via isValid as {}, i.e. zero
  *  allocations — on the verbose form. The single-assign path coerces the same
  *  way; the bulk path must too. */
 export function deriveProjectSpan(
-  p: Pick<ProjectOption, "projectType" | "startDate" | "endDate">,
+  p: Pick<ProjectOption, "projectType" | "startDate" | "endDate" | "submitDate">,
 ): AssignSpan | null {
   if (p.projectType === "campaign") {
     const startDate = toDateInputValue(p.startDate);
@@ -24,18 +24,16 @@ export function deriveProjectSpan(
     if (startDate && endDate) return { startDate, endDate };
     return null;
   }
-  const startDate = toDateInputValue(p.startDate);
-  if (startDate) return { startDate, endDate: startDate };
+  if (p.submitDate) return getPitchSubmitMonthSpan(p.submitDate);
   return null;
 }
 
-/** A project can be bulk-assigned only if it's a campaign with a usable date span.
- *  Pitches are excluded — they don't render on the timeline, so an allocation on one
- *  would be invisible and unmanageable. */
+/** A project can be bulk-assigned when a usable date span can be derived —
+ *  campaigns need both start/end dates, pitches need a submit date. */
 export function isAssignableProject(
-  p: Pick<ProjectOption, "projectType" | "startDate" | "endDate">,
+  p: Pick<ProjectOption, "projectType" | "startDate" | "endDate" | "submitDate">,
 ): boolean {
-  return p.projectType !== "pitch" && deriveProjectSpan(p) !== null;
+  return deriveProjectSpan(p) !== null;
 }
 
 export type BulkAssignSummary = {
@@ -48,7 +46,7 @@ export type BulkAssignSummary = {
  *  A project counts only if deriveProjectSpan returns a span; the rest are skipped. */
 export function summarizeBulkAssign(
   memberCount: number,
-  projects: Array<Pick<ProjectOption, "projectType" | "startDate" | "endDate">>,
+  projects: Array<Pick<ProjectOption, "projectType" | "startDate" | "endDate" | "submitDate">>,
 ): BulkAssignSummary {
   const assignableProjectCount = projects.filter((p) => isAssignableProject(p)).length;
   return {
@@ -67,7 +65,7 @@ export function applyHoursToAll(memberIds: string[], value: string): Record<stri
 /** Project shape the operation builder needs — structural subset of ProjectOption. */
 export type BulkAssignProject = Pick<
   ProjectOption,
-  "projectKey" | "projectType" | "startDate" | "endDate"
+  "projectKey" | "projectType" | "startDate" | "endDate" | "submitDate"
 >;
 
 /** Member shape the operation builder needs. */

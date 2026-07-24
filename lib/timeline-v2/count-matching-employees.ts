@@ -2,6 +2,7 @@ import type { Assignment } from "@/lib/query/hooks/useAssignments";
 import type { Employee } from "@/lib/query/hooks/useEmployees";
 import type { ProjectOption } from "@/lib/query/hooks/useProjects";
 import { getVisibleEmployeeIds } from "@/lib/timeline-v2/visible-rows";
+import type { TimelineProjectTypeScope } from "@/lib/timeline-v2/types";
 
 export type FilterPreviewDataset = {
   employees: Employee[];
@@ -13,6 +14,7 @@ export type DraftScope = {
   brandIds: string[];
   projectIds: string[];
   departmentIds: string[];
+  projectTypeScope?: TimelineProjectTypeScope;
 };
 
 export function countMatchingEmployees(dataset: FilterPreviewDataset, scope: DraftScope): number {
@@ -37,6 +39,7 @@ export function countMatchingEmployees(dataset: FilterPreviewDataset, scope: Dra
       brandIds: scope.brandIds,
       projectIds: scope.projectIds,
       departments: scope.departmentIds,
+      projectTypeScope: scope.projectTypeScope,
       searchQuery: "",
     },
   }).length;

@@ -35,6 +35,7 @@ export function toProjectOption(project: PlannerDirectoryProjectRow): ProjectOpt
     projectType: project.sourceType,
     startDate: project.startDate,
     endDate: project.endDate,
+    submitDate: project.submitDate,
     brandId: project.brandId,
     brandName: project.brandName ?? null,
     brandCompanyName: project.brandCompanyName ?? null,

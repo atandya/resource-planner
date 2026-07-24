@@ -38,4 +38,11 @@ describe("HomeClient — export filter wiring", () => {
     expect(home).toContain("brandIds: appliedBrandIds");
     expect(home).toContain("const appliedBrandIds = useMemo(");
   });
+
+  it("keeps project type scope wired through applied and draft filters", () => {
+    expect(home).toContain("projectTypeScope: appliedProjectTypeScope");
+    expect(home).toContain("projectTypeScope: draftProjectTypeScope");
+    expect(home).toContain("onProjectTypeScopeChange={setDraftProjectTypeScope}");
+    expect(home).toContain("projectTypeScope={filters.projectTypeScope}");
+  });
 });

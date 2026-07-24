@@ -53,6 +53,7 @@ export const ProjectLane = React.memo(function ProjectLane({
 }: ProjectLaneProps) {
   const openEditor = useAssignmentEditorStore((state) => state.open);
   const campaign = lane.project;
+  const isPitch = campaign.projectType === "pitch";
   const brand = lane.brand;
   const monthRangeView = getTimelineResolution(viewMode) === "month";
 
@@ -95,7 +96,7 @@ export const ProjectLane = React.memo(function ProjectLane({
 
   return (
     <div
-      className={cn("flex h-timeline-lane border-b bg-blue-50/10", lane.isHighlighted && "bg-amber-50/70")}
+      className={cn("flex h-timeline-lane border-b", isPitch ? "bg-amber-50/10" : "bg-blue-50/10", lane.isHighlighted && "bg-amber-50/70")}
       data-testid="resource-row-v2-campaign-row"
     >
       <div
@@ -107,9 +108,12 @@ export const ProjectLane = React.memo(function ProjectLane({
         onClick={(event) => event.stopPropagation()}
         title={brand?.name ? `${campaign.name} · ${brand.name}` : campaign.name}
       >
-        <Icon icon="lucide:package" className={cn("h-3.5 w-3.5 shrink-0", lane.isHighlighted ? "text-amber-600" : "text-blue-600")} />
+        <Icon
+          icon={isPitch ? "lucide:megaphone" : "lucide:package"}
+          className={cn("h-3.5 w-3.5 shrink-0", lane.isHighlighted || isPitch ? "text-amber-600" : "text-blue-600")}
+        />
         <div className="min-w-0">
-          <div className={cn("truncate text-xs font-bold uppercase tracking-wider", lane.isHighlighted ? "text-amber-800" : "text-blue-800")}>{campaign.name}</div>
+          <div className={cn("truncate text-xs font-bold uppercase tracking-wider", lane.isHighlighted || isPitch ? "text-amber-800" : "text-blue-800")}>{campaign.name}</div>
           {brand?.name ? (
             <div className="truncate text-[10px] text-muted-foreground">{brand.name}</div>
           ) : null}

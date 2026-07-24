@@ -24,12 +24,12 @@ export function groupTimelineAssignmentsByEmployee(assignments: Assignment[]) {
   return grouped;
 }
 
-function getPlanCampaignProjects(
+function getPlanLaneProjects(
   assignments: Assignment[],
   projectByKey: Map<string, ProjectOption>
 ): ProjectOption[] {
   const seenProjectKeys = new Set<string>();
-  const campaignProjects: ProjectOption[] = [];
+  const laneProjects: ProjectOption[] = [];
 
   for (const assignment of assignments) {
     if (!assignment.projectKey) continue;
@@ -37,13 +37,13 @@ function getPlanCampaignProjects(
 
     const project = projectByKey.get(assignment.projectKey);
     if (!project) continue;
-    if (project.projectType !== "campaign") continue;
+    if (project.projectType !== "campaign" && project.projectType !== "pitch") continue;
 
     seenProjectKeys.add(assignment.projectKey);
-    campaignProjects.push(project);
+    laneProjects.push(project);
   }
 
-  return campaignProjects;
+  return laneProjects;
 }
 
 function isTimelineMonthRangeView(viewMode: TimelineViewMode) {
@@ -112,7 +112,7 @@ export function buildEmployeeRowModels({
     const dayMap = dayMaps.get(employee.id);
 
     const projectLanes: ProjectLaneModel[] = [];
-    for (const project of getPlanCampaignProjects(resourceAssignments, projectByKey)) {
+    for (const project of getPlanLaneProjects(resourceAssignments, projectByKey)) {
       const planAssignments = resourceAssignments.filter(
         (assignment) => assignment.projectKey === project.projectKey
       );

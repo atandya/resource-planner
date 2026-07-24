@@ -85,6 +85,10 @@ export function sortResourceProjects({
       if (aMatch !== bMatch) return aMatch ? -1 : 1;
     }
 
+    const aIsPitch = a.projectType === "pitch";
+    const bIsPitch = b.projectType === "pitch";
+    if (aIsPitch !== bIsPitch) return aIsPitch ? 1 : -1;
+
     const aHasActive = hasActiveTimelineAssignment(a.projectKey, resourceAssignments, timelineStart, timelineEnd);
     const bHasActive = hasActiveTimelineAssignment(b.projectKey, resourceAssignments, timelineStart, timelineEnd);
     if (aHasActive !== bHasActive) return aHasActive ? -1 : 1;

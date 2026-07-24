@@ -9,7 +9,9 @@ import type { ProjectOption } from "@/lib/query/hooks/useProjects";
 import { getResourceRowLoadingState } from "@/lib/timeline-v2/resource-row-loading";
 import { shouldEnableTimelineAssignments, type TimelineAssignmentDateRange } from "@/lib/planner/initial-load";
 import { getTimelineColumns, getTimelineResolution } from "@/lib/timeline-v2/date-range";
+import type { TimelineProjectTypeScope } from "@/lib/timeline-v2/types";
 import { buildEmployeeRowModels } from "@/lib/timeline-v2/row-model";
+import { scopeProjectLanes } from "@/lib/timeline-v2/lane-order";
 import { getVisibleEmployeeIds } from "@/lib/timeline-v2/visible-rows";
 import { useTimelineEmployees } from "@/lib/timeline-v2/use-timeline-employees";
 import { useTimelineExpansionStore } from "@/lib/timeline-v2/expansion-store";
@@ -44,6 +46,7 @@ type TimelineProps = {
   departments: string[];
   searchQuery?: string;
   projectIds: string[];
+  projectTypeScope?: TimelineProjectTypeScope;
 };
 
 function getInitialDate(anchor: string) {
@@ -98,6 +101,7 @@ function toProjectOption(project: PlannerHomeBootstrapResponse["projectsById"][s
     brandId: project.brandId,
     startDate: project.startDate,
     endDate: project.endDate,
+    submitDate: project.submitDate,
   };
 }
 
@@ -108,6 +112,7 @@ export function Timeline({
   departments,
   searchQuery,
   projectIds,
+  projectTypeScope,
 }: TimelineProps) {
   const { session } = useAuth();
   const timelineRootRef = useRef<HTMLDivElement>(null);
@@ -202,8 +207,8 @@ export function Timeline({
   }, [assignmentDateRange, viewMode]);
 
   const timelineFilters = useMemo(
-    () => ({ brandIds, departments, projectIds, searchQuery }),
-    [brandIds, departments, projectIds, searchQuery]
+    () => ({ brandIds, departments, projectIds, projectTypeScope, searchQuery }),
+    [brandIds, departments, projectIds, projectTypeScope, searchQuery]
   );
   // ONE data source: a single windowed bootstrap query. It carries every
   // employee with their assignments for the date window; filters re-slice it
@@ -291,9 +296,12 @@ export function Timeline({
       // Expansion is read non-reactively; measureElement corrects real heights
       // and the expansion subscription below re-measures on toggle.
       const isExpanded = !!id && useTimelineExpansionStore.getState().expandedIds.has(id);
+      // Count only lanes the type scope will render, or scoped views get laid
+      // out at unscoped heights and visibly shrink once measureElement corrects.
+      const laneCount = scopeProjectLanes(model?.projectLanes ?? [], projectTypeScope).length;
       return getTimelineEstimatedRowHeight({
         isExpanded,
-        laneCount: model?.projectLanes.length ?? 0,
+        laneCount,
         canEditAssignments: canEditAssignmentsRef.current,
       });
     },
@@ -309,6 +317,13 @@ export function Timeline({
       }),
     [rowVirtualizer]
   );
+
+  // A scope switch changes expanded-row heights. Cached measurements would
+  // otherwise win over the scoped estimates for one frame, so drop them and
+  // let the first layout after the switch start from the correct heights.
+  useEffect(() => {
+    rowVirtualizer.measure();
+  }, [projectTypeScope, rowVirtualizer]);
 
   // Skeletons (and the edit lock) engage only while OLD-request data is shown
   // for a NEW request (date/view change). Same-key background refetches —
@@ -413,6 +428,7 @@ export function Timeline({
             canEditAssignments={canEditAssignments}
             brandIds={brandIds}
             projectIds={projectIds}
+            projectTypeScope={projectTypeScope}
           />
         </div>
       )}

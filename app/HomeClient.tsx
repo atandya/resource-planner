@@ -40,6 +40,7 @@ import type { Brand } from "@/lib/query/hooks/useBrands";
 import { useFilterPreviewStore } from "@/lib/timeline-v2/filter-preview-store";
 import { useTimelineViewStore } from "@/lib/timeline-v2/view-store";
 import { getTimelineExportDateRange } from "@/lib/timeline-v2/date-range";
+import type { TimelineProjectTypeScope } from "@/lib/timeline-v2/types";
 import { countMatchingEmployees } from "@/lib/timeline-v2/count-matching-employees";
 import { DASHBOARD_FEATURE_ENABLED } from "@/lib/dashboard/feature-flag";
 
@@ -53,6 +54,7 @@ type HomePlannerFilters = {
   departments: string[];
   searchQuery: string;
   projectIds: string[];
+  projectTypeScope: TimelineProjectTypeScope;
 };
 
 const HomePlannerContext = createContext<HomePlannerFilters | null>(null);
@@ -88,6 +90,7 @@ export function HomePlannerTimeline({
       departments={filters.departments}
       searchQuery={filters.searchQuery}
       projectIds={filters.projectIds}
+      projectTypeScope={filters.projectTypeScope}
     />
   );
 }
@@ -119,12 +122,14 @@ export function HomeClient({
   const [appliedBrands, setAppliedBrands] = useState<Brand[]>([]);
   const [appliedProjectIds, setAppliedProjectIds] = useState<string[]>([]);
   const [appliedDepartmentIds, setAppliedDepartmentIds] = useState<string[]>([]);
+  const [appliedProjectTypeScope, setAppliedProjectTypeScope] = useState<TimelineProjectTypeScope>("all");
 
   const appliedBrandIds = useMemo(() => appliedBrands.map((b) => b.id), [appliedBrands]);
 
   const [draftBrands, setDraftBrands] = useState<Brand[]>([]);
   const [draftProjects, setDraftProjects] = useState<ProjectOption[]>([]);
   const [draftDepartmentIds, setDraftDepartmentIds] = useState<string[]>([]);
+  const [draftProjectTypeScope, setDraftProjectTypeScope] = useState<TimelineProjectTypeScope>("all");
 
   const [panelOpen, setPanelOpen] = useState(false);
 
@@ -203,8 +208,9 @@ export function HomeClient({
       departments: appliedDepartmentIds,
       searchQuery: debouncedSearch,
       projectIds: appliedProjectIds,
+      projectTypeScope: appliedProjectTypeScope,
     }),
-    [appliedBrandIds, appliedDepartmentIds, appliedProjectIds, debouncedSearch]
+    [appliedBrandIds, appliedDepartmentIds, appliedProjectIds, appliedProjectTypeScope, debouncedSearch]
   );
 
   const previewDataset = useFilterPreviewStore((state) => state.dataset);
@@ -214,8 +220,9 @@ export function HomeClient({
       brandIds: draftBrands.map((b) => b.id),
       projectIds: draftProjects.map((p) => p.id),
       departmentIds: draftDepartmentIds,
+      projectTypeScope: draftProjectTypeScope,
     });
-  }, [previewDataset, draftBrands, draftProjects, draftDepartmentIds]);
+  }, [previewDataset, draftBrands, draftProjects, draftDepartmentIds, draftProjectTypeScope]);
 
   const brands = useMemo(
     () => brandQuery.data?.pages.flatMap((page) => page.brands) ?? [],
@@ -261,11 +268,12 @@ export function HomeClient({
     setAppliedBrands(draftBrands);
     setAppliedProjectIds(draftProjects.map((p) => p.id));
     setAppliedDepartmentIds(draftDepartmentIds);
+    setAppliedProjectTypeScope(draftProjectTypeScope);
     setPanelOpen(false);
-  }, [draftBrands, draftProjects, draftDepartmentIds]);
+  }, [draftBrands, draftProjects, draftDepartmentIds, draftProjectTypeScope]);
 
   const handleClearAll = useCallback(() => {
-    setDraftBrands([]); setDraftProjects([]); setDraftDepartmentIds([]);
+    setDraftBrands([]); setDraftProjects([]); setDraftDepartmentIds([]); setDraftProjectTypeScope("all");
   }, []);
 
   return (
@@ -283,8 +291,8 @@ export function HomeClient({
             <FilterPanel
               open={panelOpen}
               onOpenChange={setPanelOpen}
-              draft={{ brands: draftBrands, projects: draftProjects, departmentIds: draftDepartmentIds }}
-              appliedCount={appliedBrandIds.length + appliedProjectIds.length + appliedDepartmentIds.length}
+              draft={{ brands: draftBrands, projects: draftProjects, departmentIds: draftDepartmentIds, projectTypeScope: draftProjectTypeScope }}
+              appliedCount={appliedBrandIds.length + appliedProjectIds.length + appliedDepartmentIds.length + (appliedProjectTypeScope !== "all" ? 1 : 0)}
               matchCount={draftMatchCount}
               brandFeed={{
                 options: brands.map((b) => ({ id: b.id, label: b.name, sublabel: b.companyName })),
@@ -305,6 +313,7 @@ export function HomeClient({
               onToggleBrand={handleToggleBrandId}
               onToggleProject={handleToggleProjectId}
               onToggleDepartment={handleToggleDepartment}
+              onProjectTypeScopeChange={setDraftProjectTypeScope}
               onRemoveBrand={(id) => setDraftBrands((prev) => prev.filter((b) => b.id !== id))}
               onRemoveProject={(id) => setDraftProjects((prev) => prev.filter((p) => p.id !== id))}
               onRemoveDepartment={(id) => setDraftDepartmentIds((prev) => prev.filter((d) => d !== id))}
