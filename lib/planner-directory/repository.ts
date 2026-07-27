@@ -12,6 +12,7 @@ import type {
 } from "@/lib/planner-directory/types";
 import { chunkRowsForBatching, getPlannerDirectoryBatchSize } from "@/lib/planner-directory/write-batches";
 import { shouldSkipArchive } from "./archive-guard";
+import { createTtlMemo, type DirectoryReadOptions } from "./directory-cache";
 
 type PlannerDirectoryDb = {
   query(sql: string, params?: unknown[]): Promise<unknown>;
@@ -353,6 +354,12 @@ export function createPlannerDirectoryRepository(options: PlannerDirectoryReposi
 
   const dialect = getDialect();
 
+  // Per-instance so each createPlannerDirectoryRepository() call — including every
+  // test harness — starts with a cold cache and cannot leak rows into another.
+  const brandsCache = createTtlMemo(loadBrands);
+  const projectsCache = createTtlMemo(loadProjects);
+  const employeesCache = createTtlMemo(loadEmployees);
+
   async function upsertDepartments(rows: PlannerDirectoryDepartmentRow[]): Promise<number> {
     return upsertRowsInBatches(db, dialect, {
       table: "planner_departments",
@@ -363,30 +370,36 @@ export function createPlannerDirectoryRepository(options: PlannerDirectoryReposi
   }
 
   async function upsertBrands(rows: PlannerDirectoryBrandRow[]): Promise<number> {
-    return upsertRowsInBatches(db, dialect, {
+    const upserted = await upsertRowsInBatches(db, dialect, {
       table: "planner_brands",
       entityLabel: "brands",
       rows: rows.map(mapBrandRow),
       conflictColumns: ["brand_id"],
     });
+    brandsCache.invalidate();
+    return upserted;
   }
 
   async function upsertProjects(rows: PlannerDirectoryProjectRow[]): Promise<number> {
-    return upsertRowsInBatches(db, dialect, {
+    const upserted = await upsertRowsInBatches(db, dialect, {
       table: "planner_projects",
       entityLabel: "projects",
       rows: rows.map(mapProjectRow),
       conflictColumns: ["project_key"],
     });
+    projectsCache.invalidate();
+    return upserted;
   }
 
   async function upsertEmployees(rows: PlannerDirectoryEmployeeRow[]): Promise<number> {
-    return upsertRowsInBatches(db, dialect, {
+    const upserted = await upsertRowsInBatches(db, dialect, {
       table: "planner_employees",
       entityLabel: "employees",
       rows: rows.map(mapEmployeeRow),
       conflictColumns: ["employee_uuid"],
     });
+    employeesCache.invalidate();
+    return upserted;
   }
 
   async function markMissingAsArchived(args: {
@@ -419,6 +432,12 @@ export function createPlannerDirectoryRepository(options: PlannerDirectoryReposi
         : "";
     const sql = `UPDATE ${target.table} SET archived_at = ${dialect === "postgresql" ? "$1" : "?"} ${whereClause}`;
     await db.query(sql, params);
+    // Archiving rewrites archived_at, so any cached snapshot of this entity is stale.
+    // Departments aren't cached; the early return above means a skipped archive
+    // never reaches here, so we only invalidate after a write actually happened.
+    if (args.entity === "brand") brandsCache.invalidate();
+    else if (args.entity === "project") projectsCache.invalidate();
+    else if (args.entity === "employee") employeesCache.invalidate();
     return args.seenIds.length;
   }
 
@@ -697,9 +716,15 @@ export function createPlannerDirectoryRepository(options: PlannerDirectoryReposi
     return readRows<DbRow>(result).map(mapDepartmentReadRow);
   }
 
-  async function listBrands(): Promise<PlannerDirectoryBrandRow[]> {
+  async function loadBrands(): Promise<PlannerDirectoryBrandRow[]> {
     const result = await db.query(`SELECT * FROM planner_brands ORDER BY name ASC`);
     return readRows<DbRow>(result).map(mapBrandReadRow);
+  }
+
+  // readonly: cached reads hand every caller the same array instance, so an
+  // in-place sort/push by one consumer would corrupt it for the whole isolate.
+  async function listBrands(options?: DirectoryReadOptions): Promise<readonly PlannerDirectoryBrandRow[]> {
+    return brandsCache.read(options);
   }
 
   async function listBrandsForFilterOptions(args: {
@@ -743,12 +768,16 @@ export function createPlannerDirectoryRepository(options: PlannerDirectoryReposi
     };
   }
 
-  async function listProjects(): Promise<PlannerDirectoryProjectRow[]> {
+  async function loadProjects(): Promise<PlannerDirectoryProjectRow[]> {
     const result = await db.query(`SELECT * FROM planner_projects ORDER BY name ASC`);
     return readRows<DbRow>(result).map(mapProjectReadRow);
   }
 
-  async function listEmployees(): Promise<PlannerDirectoryEmployeeRow[]> {
+  async function listProjects(options?: DirectoryReadOptions): Promise<readonly PlannerDirectoryProjectRow[]> {
+    return projectsCache.read(options);
+  }
+
+  async function loadEmployees(): Promise<PlannerDirectoryEmployeeRow[]> {
     const result = await db.query(`SELECT * FROM planner_employees ORDER BY full_name ASC`);
     return readRows<DbRow>(result).map((row) => ({
       employeeUuid: String(row.employee_uuid),
@@ -771,6 +800,10 @@ export function createPlannerDirectoryRepository(options: PlannerDirectoryReposi
       lastSeenAt: String(row.last_seen_at ?? ""),
       archivedAt: row.archived_at ? String(row.archived_at) : null,
     }));
+  }
+
+  async function listEmployees(options?: DirectoryReadOptions): Promise<readonly PlannerDirectoryEmployeeRow[]> {
+    return employeesCache.read(options);
   }
 
   // EXISTS over one assignment table for the brand/project employee scoping —

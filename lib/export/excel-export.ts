@@ -6,6 +6,8 @@
 import ExcelJS from 'exceljs';
 import { ResourceCapacityAnalysis } from '@/lib/analysis/types';
 import type { ProjectExportData } from './csv-export';
+import type { BrandReportRow } from './brand-report';
+import type { DetailedReportRow } from './detailed-report';
 
 // ============================================================================
 // Excel Styling Constants
@@ -1241,6 +1243,135 @@ function createConflictsByTypeSheet(
   }
 
   setColumnWidths(worksheet, [20, 25, 20, 12, 12, 40]);
+}
+
+// ============================================================================
+// Brand Report Excel Export
+// ============================================================================
+
+/**
+ * Export brand report to Excel: one sheet, one row per (brand, employee) with
+ * man-hours split across project types
+ * (Brand | Employee | Campaign Hours | Pitch Hours | [Other Hours] | Total Hours).
+ * The Other Hours column appears only when some hours come from an unresolved
+ * project type. Rows are expected pre-sorted and pre-rounded by the caller.
+ */
+export async function exportBrandReportToExcel(rows: BrandReportRow[]): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Resource Planner';
+  workbook.created = new Date();
+
+  const worksheet = workbook.addWorksheet('Brand Report', { views: [{ state: 'frozen', ySplit: 1 }] });
+
+  const includeOther = rows.some((r) => r.otherHours > 0);
+
+  const headers = includeOther
+    ? ['Brand', 'Employee', 'Campaign Hours', 'Pitch Hours', 'Other Hours', 'Total Hours']
+    : ['Brand', 'Employee', 'Campaign Hours', 'Pitch Hours', 'Total Hours'];
+  const headerRow = worksheet.addRow(headers);
+  applyHeaderStyle(headerRow, HEADER_STYLE);
+
+  // Brand Report hours are rounded to 1 decimal upstream (buildBrandReportRows),
+  // so this sheet formats to 1 decimal instead of the file-wide 2-decimal default.
+  const hoursStyle = { ...NUMBER_CELL_STYLE, numFmt: '#,##0.0' };
+
+  for (const row of rows) {
+    const values = includeOther
+      ? [row.brand, row.employee, row.campaignHours, row.pitchHours, row.otherHours, row.totalHours]
+      : [row.brand, row.employee, row.campaignHours, row.pitchHours, row.totalHours];
+    const dataRow = worksheet.addRow(values);
+    applyRowStyle(dataRow, CELL_STYLE);
+    // Numeric hour columns start at column 3.
+    for (let col = 3; col <= values.length; col++) {
+      dataRow.getCell(col).style = hoursStyle;
+    }
+  }
+
+  const lastColumn = includeOther ? 6 : 5;
+  setColumnWidths(worksheet, includeOther ? [30, 30, 15, 13, 13, 13] : [30, 30, 15, 13, 13]);
+
+  // Header-row filter dropdowns (Excel AutoFilter; Google Sheets imports it as
+  // an applied filter) so users can sort/filter each column on open.
+  worksheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: worksheet.rowCount, column: lastColumn },
+  };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
+}
+
+// ============================================================================
+// Detailed Data Report Excel Export
+// ============================================================================
+
+/**
+ * Export the Detailed Data Report: one sheet, one row per
+ * (employee, project, month) —
+ * Department | Employee | Brand | Project Name | Project Type | Month | Planned Hours.
+ * Rows arrive pre-sorted and pre-rounded from buildDetailedReportRows.
+ *
+ * Deliberately NO totals row: this is a semi-raw dataset meant to be filtered
+ * and pivoted, and a totals row silently corrupts every one of those.
+ */
+export async function exportDetailedReportToExcel(rows: DetailedReportRow[]): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Resource Planner';
+  workbook.created = new Date();
+
+  const worksheet = workbook.addWorksheet('Detailed Data', { views: [{ state: 'frozen', ySplit: 1 }] });
+
+  const headerRow = worksheet.addRow([
+    'Department',
+    'Employee',
+    'Brand',
+    'Project Name',
+    'Project Type',
+    'Month',
+    'Planned Hours',
+  ]);
+  applyHeaderStyle(headerRow, HEADER_STYLE);
+
+  // Hours are rounded to 1 decimal upstream, so format to 1 decimal rather than
+  // the file-wide 2-decimal default (matches the Brand Report sheet).
+  const hoursStyle = { ...NUMBER_CELL_STYLE, numFmt: '#,##0.0' };
+  const monthStyle = { ...CELL_STYLE, numFmt: 'mmm yyyy' };
+
+  for (const row of rows) {
+    // Month is a REAL date, not text: Excel then sorts, date-filters and
+    // pivot-groups it correctly across a year boundary (Oct 2025 -> Jan 2026),
+    // which text months cannot do. Built with Date.UTC because ExcelJS
+    // serializes the UTC instant — a local-time constructor would land on the
+    // last day of the previous month for any server east of Greenwich.
+    const [year, month] = row.month.split('-').map(Number);
+    const monthDate = new Date(Date.UTC(year, month - 1, 1));
+
+    const dataRow = worksheet.addRow([
+      row.department,
+      row.employee,
+      row.brand,
+      row.projectName,
+      row.projectType,
+      monthDate,
+      row.plannedHours,
+    ]);
+    applyRowStyle(dataRow, CELL_STYLE);
+    // "Oct 2025" on screen, a date underneath.
+    dataRow.getCell(6).style = monthStyle;
+    dataRow.getCell(7).style = hoursStyle;
+  }
+
+  setColumnWidths(worksheet, [22, 26, 24, 32, 14, 12, 14]);
+
+  // Header-row filter dropdowns (Excel AutoFilter; Google Sheets imports it as
+  // an applied filter) so users can sort/filter each column on open.
+  worksheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: worksheet.rowCount, column: 7 },
+  };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
 }
 
 // ============================================================================

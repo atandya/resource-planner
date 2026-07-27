@@ -414,6 +414,41 @@ describe("planner directory sync engine", () => {
     expect(repository.listEmployees).toHaveBeenCalled();
   });
 
+  it("reads existing rows past the cache so the changed-row diff can't go stale", async () => {
+    const { repository } = createRepository();
+    const source = createSource();
+
+    await runPlannerDirectorySync(
+      {
+        session: {
+          access_token: "token",
+          user: { id: 1, email: "a@example.com" },
+          employee: {
+            id: 1,
+            uuid: "emp-1",
+            nik: "1001",
+            full_name: "Ada Lovelace",
+            nickname: "Ada",
+            position: "Planner",
+            dept_id: 1,
+            department_name: "Creative",
+            photo: "",
+          },
+          access: { level: "full", can_view_all: true, can_view_own_only: false },
+        },
+        syncMode: "incremental_refresh",
+        triggerSource: "schedule",
+      },
+      { repository: repository as never, source: source as never, now: () => "2026-06-05T00:00:00.000Z" }
+    );
+
+    // These three feed filterChanged*, which decides what gets upserted. A cached
+    // snapshot here would make a changed row look unchanged and skip its update.
+    for (const read of [repository.listBrands, repository.listProjects, repository.listEmployees]) {
+      expect(read).toHaveBeenCalledWith({ bypassCache: true });
+    }
+  });
+
   it("handles Timetrack-scale backfill volumes", async () => {
     const { repository } = createRepository();
     const source = createLargeSource();

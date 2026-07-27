@@ -66,6 +66,26 @@ function getAllColumns(
   }
 }
 
+// Month-aligned version of the visible range, for consumers whose pickers are
+// month-granular (e.g. the export dialog). Week/month views snap to their
+// enclosing month(s); all other views are already month-aligned.
+export function getTimelineExportDateRange({
+  anchorDate,
+  viewMode,
+  customRange,
+}: {
+  anchorDate: Date | null;
+  viewMode: TimelineViewMode;
+  customRange?: { start: Date; end: Date } | null;
+}): { startDate: string; endDate: string } | null {
+  if (!anchorDate) return null;
+  const allColumns = getAllColumns(anchorDate, viewMode, customRange);
+  return {
+    startDate: toLocalDateString(startOfMonth(allColumns[0])),
+    endDate: toLocalDateString(endOfMonth(allColumns[allColumns.length - 1])),
+  };
+}
+
 export function getTimelineResolution(viewMode: TimelineViewMode): TimelineResolution {
   return viewMode === "week" || viewMode === "month" ? "day" : "month";
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { endOfMonth, format as formatDateFns, startOfMonth } from "date-fns";
 import { Icon } from "@iconify/react";
 import {
   Dialog,
@@ -13,23 +14,64 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { useToast, toast } from "@/hooks/use-toast";
+import { toast } from "@/hooks/use-toast";
+import { CustomRangePicker } from "@/components/timeline-v2/CustomRangePicker";
 import type { ExportOption, ExportFormat } from "./ExportButton";
 import { downloadCsvFile, generateExportFilename } from "@/lib/export/csv-export";
-import { downloadExcelFile, generateExcelFilename } from "@/lib/export/excel-export";
+import { downloadExcelFile } from "@/lib/export/excel-export";
+import { buildExportSearchParams, type ExportFilters } from "@/lib/export/export-params";
+import {
+  BRAND_EXPORT_ROUTE,
+  DETAILED_EXPORT_ROUTE,
+  countEndpointFor,
+  resolveExportCountView,
+  shouldFetchExportCount,
+  type ExportCountStatus,
+} from "@/lib/export/export-count-state";
+import { fetchExportCount } from "@/lib/export/fetch-export-count";
+import {
+  honorsFilter,
+  selectHonoredFilters,
+  FILTER_LABELS,
+  type ExportFilterNames,
+} from "@/lib/export/applied-filters";
+import { BrandScopeField } from "./BrandScopeField";
+import { DepartmentScopeField } from "./DepartmentScopeField";
+import type { FilterColumnOption } from "@/components/filters/FilterColumn";
+import { shouldReseed, type ExportDialogSeed } from "@/lib/export/export-dialog-seed";
+
+/** Upper bound on the count pre-flight, so a hung request can't spin forever. */
+const COUNT_TIMEOUT_MS = 15000;
+
+const FORMAT_CHOICES: Array<{
+  value: ExportFormat;
+  label: string;
+  description: string;
+  icon: string;
+  iconClassName?: string;
+}> = [
+  {
+    value: "csv",
+    label: "CSV",
+    description: "Opens in Excel",
+    icon: "lucide:file-text",
+  },
+  {
+    value: "excel",
+    label: "Excel",
+    description: "Multi-sheet with formatting",
+    icon: "lucide:file-spreadsheet",
+    iconClassName: "text-muted-foreground",
+  },
+];
 
 interface ExportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   exportOption: ExportOption;
-  filters?: {
-    brandId?: string | null;
-    departmentId?: string | null;
-    projectId?: string | null;
-    employeeIds?: string[];
-    startDate?: string;
-    endDate?: string;
-  };
+  filters?: ExportFilters & { startDate?: string; endDate?: string };
+  /** Display labels for filter ids, so the seeded scope shows "Acme" rather than "206". */
+  filterNames?: ExportFilterNames;
 }
 
 export const ExportDialog: React.FC<ExportDialogProps> = ({
@@ -37,12 +79,17 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
   onOpenChange,
   exportOption,
   filters,
+  filterNames,
 }) => {
   const [format, setFormat] = useState<ExportFormat>("csv");
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState("");
   const [recordCount, setRecordCount] = useState<number | null>(null);
+  const [countStatus, setCountStatus] = useState<ExportCountStatus>("idle");
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
+  const [scopeBrands, setScopeBrands] = useState<FilterColumnOption[]>([]);
+  const [scopeDepartments, setScopeDepartments] = useState<FilterColumnOption[]>([]);
+  const lastAppliedSeed = useRef<ExportDialogSeed | null>(null);
 
   // Set default format based on what's available
   useEffect(() => {
@@ -51,60 +98,133 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     }
   }, [exportOption, format]);
 
-  // Initialize date range
+  // Rule C: dialog edits (scope AND dates) survive close/reopen, and re-seed
+  // from the timeline only when its contribution changed since last applied.
+  // This replaces the old always-reseed-on-open rule so both fields share one
+  // memory model. The dialog stays mounted after close (ExportButton renders
+  // on selectedExport, not open), which is what makes persistence work.
   useEffect(() => {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    if (exportOption.requireDateRange) {
-      setDateRange({
-        start: filters?.startDate || startOfMonth.toISOString().split('T')[0],
-        end: filters?.endDate || endOfMonth.toISOString().split('T')[0],
-      });
-    } else {
-      // Initialize with current month anyway for consistency
-      setDateRange({
-        start: filters?.startDate || startOfMonth.toISOString().split('T')[0],
-        end: filters?.endDate || endOfMonth.toISOString().split('T')[0],
-      });
-    }
-  }, [exportOption, filters]);
-
-  // Estimate record count
-  useEffect(() => {
-    // This is a rough estimate - actual count would come from API
-    const estimateCount = () => {
-      switch (exportOption.type) {
-        case "assignments":
-          return 100 + Math.floor(Math.random() * 500);
-        case "utilization":
-          return 50 + Math.floor(Math.random() * 100);
-        case "projects":
-          return 20 + Math.floor(Math.random() * 50);
-        case "conflicts":
-          return 5 + Math.floor(Math.random() * 30);
-        default:
-          return 50;
-      }
+    if (!open) return;
+    const incomingSeed: ExportDialogSeed = {
+      brandIds: filters?.brandIds ?? [],
+      departmentIds: filters?.departmentIds ?? [],
+      startDate: filters?.startDate,
+      endDate: filters?.endDate,
     };
-    setRecordCount(estimateCount());
-  }, [exportOption]);
+    if (!shouldReseed({ incomingSeed, lastAppliedSeed: lastAppliedSeed.current })) return;
+    lastAppliedSeed.current = incomingSeed;
+
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    setDateRange({
+      start: incomingSeed.startDate || monthStart.toISOString().split("T")[0],
+      end: incomingSeed.endDate || monthEnd.toISOString().split("T")[0],
+    });
+    const brandNameById = filterNames?.brandIds ?? {};
+    setScopeBrands(incomingSeed.brandIds.map((id) => ({ id, label: brandNameById[id] ?? id })));
+    const departmentNameById = filterNames?.departmentIds ?? {};
+    setScopeDepartments(
+      incomingSeed.departmentIds.map((id) => ({ id, label: departmentNameById[id] ?? id })),
+    );
+    // Seed inputs are read fresh on each open; comparing inside the effect is
+    // the point, so `open` is the only dependency (same as before).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Only the filters this export actually applies. Sending the rest would put
+  // params in the URL that the route discards, and would re-count on changes
+  // that cannot move the number.
+  const honoredFilters = useMemo(
+    () =>
+      selectHonoredFilters(exportOption.type, {
+        ...filters,
+        // brandIds and departmentIds come from dialog-local scope, not the
+        // timeline props: each scope field's Apply is the source of truth once
+        // the dialog has seeded.
+        brandIds: scopeBrands.map((option) => option.id),
+        departmentIds: scopeDepartments.map((option) => option.id),
+      }),
+    // `filters` gets a new identity on every parent render; its inner arrays
+    // are the stable pieces this derivation can actually consume, so depend on
+    // those (brandIds and departmentIds are overridden by the scope state above
+    // and are deliberately absent).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [
+      exportOption.type,
+      scopeBrands,
+      scopeDepartments,
+      filters?.projectIds,
+      filters?.employeeIds,
+    ],
+  );
+  // Stable key: cheap to derive from the memoized object, and the count effect
+  // below keys off the honored contents instead of `filters` identity.
+  const honoredFiltersKey = JSON.stringify(honoredFilters);
+
+  // Live record count: debounced countOnly pre-flight against the same route
+  // and params the export itself uses, so the number can't disagree with the file.
+  useEffect(() => {
+    const endpoint = countEndpointFor(exportOption.type);
+    if (!endpoint || !shouldFetchExportCount({ open, exportType: exportOption.type, dateRange })) {
+      setRecordCount(null);
+      setCountStatus("idle");
+      return;
+    }
+    const controller = new AbortController();
+    // Both paths below abort the same controller, so `aborted` alone cannot say
+    // which happened. A timeout is a genuine failure the user should stop
+    // waiting on; a cleanup abort means this effect is stale and must not write
+    // state at all. This flag is the only thing that tells them apart.
+    let timedOut = false;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    setCountStatus("loading");
+    const timer = setTimeout(async () => {
+      // Started here, not with the debounce, so the budget covers the request
+      // itself rather than being partly eaten by the 400ms wait.
+      timeoutId = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, COUNT_TIMEOUT_MS);
+      try {
+        const count = await fetchExportCount(
+          endpoint,
+          { dateRange, filters: honoredFilters },
+          controller.signal,
+        );
+        // A response that resolved just before cleanup must not overwrite the
+        // count for a range the user has already moved on from.
+        if (controller.signal.aborted) return;
+        setRecordCount(count);
+        setCountStatus("ready");
+      } catch {
+        // Report a timeout as an error; stay silent for a cleanup cancellation.
+        if (timedOut || !controller.signal.aborted) {
+          setRecordCount(null);
+          setCountStatus("error");
+        }
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }, 400);
+    return () => {
+      clearTimeout(timer);
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
+    // `filters` identity changes on every parent render, so depend on the
+    // serialized honored subset instead — same reason the range-seeding effect
+    // above ignores it. Adding a filter to HONORED_FILTERS for this export type
+    // automatically re-counts on its changes; nobody has to touch this array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, exportOption.type, dateRange.start, dateRange.end, honoredFiltersKey]);
 
   const handleExport = async () => {
     setIsExporting(true);
     setExportProgress("Initializing export...");
 
     try {
-      // Build query parameters
-      const params = new URLSearchParams();
-      params.append("format", format);
-
-      // Always add date range if available (not just when required)
-      if (dateRange.start && dateRange.end) {
-        params.append("startDate", dateRange.start);
-        params.append("endDate", dateRange.end);
-      } else if (exportOption.requireDateRange) {
+      if (exportOption.requireDateRange && (!dateRange.start || !dateRange.end)) {
         toast({
           variant: "destructive",
           title: "Validation Error",
@@ -115,10 +235,10 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
         return;
       }
 
-      if (filters?.brandId) params.append("brandIds", filters.brandId);
-      if (filters?.departmentId) params.append("departmentIds", filters.departmentId);
-      if (filters?.projectId) params.append("projectIds", filters.projectId);
-      if (filters?.employeeIds?.length) params.append("employeeIds", filters.employeeIds.join(","));
+      // Same builder and same honored subset as the countOnly pre-flight, so
+      // count and file agree.
+      const params = buildExportSearchParams({ dateRange, filters: honoredFilters });
+      params.append("format", format);
 
       // Build API URL
       let apiUrl: string;
@@ -130,12 +250,18 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
         apiUrl = `/api/export/assignments/excel?${params.toString()}`;
       } else if (format === "excel" && exportOption.type === "conflicts") {
         apiUrl = `/api/export/conflicts/excel?${params.toString()}`;
+      } else if (format === "excel" && exportOption.type === "brand") {
+        // Same route constant the count pre-flight resolves to, so the number
+        // in the dialog and the file it describes can never target different URLs.
+        apiUrl = `${BRAND_EXPORT_ROUTE}?${params.toString()}`;
+      } else if (format === "excel" && exportOption.type === "detailed") {
+        // Same rule as the brand branch above: one constant for both the count
+        // pre-flight and the file, so they can never target different URLs.
+        apiUrl = `${DETAILED_EXPORT_ROUTE}?${params.toString()}`;
       } else {
         apiUrl = `/api/export/${exportOption.type}?${params.toString()}`;
       }
 
-      // Fetch export data with better progress tracking
-      console.log('[Export Dialog] Fetching from:', apiUrl);
       setExportProgress("Fetching data from database...");
 
       // Add timeout to prevent hanging - different timeouts for different export types
@@ -146,9 +272,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
 
       let response;
       try {
-        console.log('[Export Dialog] Starting fetch:', apiUrl);
         response = await fetch(apiUrl, { signal: controller.signal });
-        console.log('[Export Dialog] Response status:', response.status, 'ok:', response.ok, 'content-type:', response.headers.get('content-type'));
       } catch (fetchError) {
         clearTimeout(timeoutId);
         if (fetchError instanceof Error && fetchError.name === 'AbortError') {
@@ -236,6 +360,12 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
     });
   };
 
+  const countView = resolveExportCountView({
+    exportType: exportOption.type,
+    status: countStatus,
+    count: recordCount,
+  });
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
@@ -256,37 +386,50 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           {exportOption.requireDateRange && (
             <div className="space-y-2">
               <Label className="text-sm font-medium">Date Range</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label htmlFor="start-date" className="text-xs text-muted-foreground">
-                    Start Date
-                  </Label>
-                  <input
-                    id="start-date"
-                    type="date"
-                    value={dateRange.start}
-                    onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
-                    className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="end-date" className="text-xs text-muted-foreground">
-                    End Date
-                  </Label>
-                  <input
-                    id="end-date"
-                    type="date"
-                    value={dateRange.end}
-                    onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
-                    className="w-full h-9 px-3 rounded-md border border-input bg-background text-sm"
-                  />
-                </div>
-              </div>
-              {dateRange.start && dateRange.end && (
-                <p className="text-xs text-muted-foreground">
-                  {formatDate(dateRange.start)} - {formatDate(dateRange.end)}
-                </p>
-              )}
+              <CustomRangePicker
+                value={
+                  dateRange.start && dateRange.end
+                    ? {
+                        start: startOfMonth(new Date(dateRange.start)),
+                        end: startOfMonth(new Date(dateRange.end)),
+                      }
+                    : null
+                }
+                onApply={(range) =>
+                  setDateRange({
+                    start: formatDateFns(range.start, "yyyy-MM-dd"),
+                    end: formatDateFns(endOfMonth(range.end), "yyyy-MM-dd"),
+                  })
+                }
+              >
+                <Button variant="outline" className="w-full justify-between font-normal">
+                  <span>
+                    {dateRange.start && dateRange.end
+                      ? `${formatDate(dateRange.start)} - ${formatDate(dateRange.end)}`
+                      : "Select date range"}
+                  </span>
+                  <Icon icon="lucide:calendar" className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </CustomRangePicker>
+            </div>
+          )}
+
+          {/* Editable scope — rendered only for filters this export honors. */}
+          {honorsFilter(exportOption.type, "brandIds") && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                {FILTER_LABELS.brandIds.many}
+              </Label>
+              <BrandScopeField scope={scopeBrands} onApply={setScopeBrands} />
+            </div>
+          )}
+
+          {honorsFilter(exportOption.type, "departmentIds") && (
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">
+                {FILTER_LABELS.departmentIds.many}
+              </Label>
+              <DepartmentScopeField scope={scopeDepartments} onApply={setScopeDepartments} />
             </div>
           )}
 
@@ -294,66 +437,72 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({
           <div className="space-y-2">
             <Label className="text-sm font-medium">Format</Label>
             <RadioGroup value={format} onValueChange={(v) => setFormat(v as ExportFormat)}>
-              {exportOption.formats.includes("csv") && (
-                <div className="flex items-center space-x-2 rounded-md border p-3 hover:bg-accent">
-                  <RadioGroupItem value="csv" id="csv" />
-                  <Label htmlFor="csv" className="flex-1 cursor-pointer">
-                    <div className="flex items-center gap-2">
-                      <Icon icon="lucide:file-text" className="h-4 w-4" />
-                      <span className="font-medium">CSV</span>
-                      <span className="text-xs text-muted-foreground">- Opens in Excel</span>
-                    </div>
-                  </Label>
-                </div>
-              )}
-              {exportOption.formats.includes("excel") && (
-                <div className="flex items-center space-x-2 rounded-md border p-3 hover:bg-accent">
-                  <RadioGroupItem value="excel" id="excel" />
-                  <Label htmlFor="excel" className="flex-1 cursor-pointer">
-                    <div className="flex items-center gap-2">
-                      <Icon icon="lucide:file-spreadsheet" className="h-4 w-4 text-green-600" />
-                      <span className="font-medium">Excel</span>
-                      <span className="text-xs text-muted-foreground">- Multi-sheet with formatting</span>
-                    </div>
-                  </Label>
-                </div>
-              )}
+              {FORMAT_CHOICES.map((choice) => {
+                const isAvailable = exportOption.formats.includes(choice.value);
+                return (
+                  <div
+                    key={choice.value}
+                    className={`flex items-center space-x-2 rounded-md border p-3 ${
+                      isAvailable ? "hover:bg-accent" : "opacity-50"
+                    }`}
+                  >
+                    <RadioGroupItem value={choice.value} id={choice.value} disabled={!isAvailable} />
+                    <Label
+                      htmlFor={choice.value}
+                      className={`flex-1 ${isAvailable ? "cursor-pointer" : "cursor-not-allowed"}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Icon icon={choice.icon} className={`h-4 w-4 ${choice.iconClassName}`} />
+                        <span className="font-medium">{choice.label}</span>
+                        <span className="text-xs text-muted-foreground">
+                          - {isAvailable ? choice.description : "Not available for this report"}
+                        </span>
+                      </div>
+                    </Label>
+                  </div>
+                );
+              })}
             </RadioGroup>
           </div>
 
           {/* Record Count */}
-          {recordCount !== null && (
+          {countView.banner && (
             <div className="rounded-md bg-muted p-3">
-              <div className="flex items-center gap-2 text-sm">
-                <Icon icon="lucide:info" className="h-4 w-4 text-muted-foreground" />
-                <span className="text-muted-foreground">
-                  Approximately <span className="font-semibold text-foreground">{recordCount}</span> records will be exported
-                </span>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                {countView.banner.kind === "loading" && (
+                  <>
+                    <Icon icon="lucide:loader-2" className="h-4 w-4 animate-spin" />
+                    <span>Counting records…</span>
+                  </>
+                )}
+                {countView.banner.kind === "empty" && (
+                  <>
+                    <Icon icon="lucide:info" className="h-4 w-4" />
+                    <span>No data in the selected range</span>
+                  </>
+                )}
+                {countView.banner.kind === "count" && (
+                  <>
+                    <Icon icon="lucide:info" className="h-4 w-4" />
+                    <span>
+                      <span className="font-semibold text-foreground">
+                        {countView.banner.count.toLocaleString()}
+                      </span>{" "}
+                      record{countView.banner.count === 1 ? "" : "s"} will be exported
+                    </span>
+                  </>
+                )}
               </div>
             </div>
           )}
 
-          {/* Applied Filters */}
-          {filters && (filters.brandId || filters.departmentId || filters.projectId) && (
-            <div className="rounded-md bg-blue-50 dark:bg-blue-950 p-3">
-              <div className="flex items-center gap-2 text-sm text-blue-700 dark:text-blue-300">
-                <Icon icon="lucide:filter" className="h-4 w-4" />
-                <span className="font-medium">Applied Filters</span>
-              </div>
-              <div className="mt-1 text-xs text-blue-600 dark:text-blue-400">
-                {filters.brandId && <div>Brand: {filters.brandId}</div>}
-                {filters.departmentId && <div>Department: {filters.departmentId}</div>}
-                {filters.projectId && <div>Project: {filters.projectId}</div>}
-              </div>
-            </div>
-          )}
         </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isExporting}>
             Cancel
           </Button>
-          <Button onClick={handleExport} disabled={isExporting}>
+          <Button onClick={handleExport} disabled={isExporting || countView.blocksExport}>
             {isExporting ? (
               <>
                 <Icon icon="lucide:loader-2" className="mr-2 h-4 w-4 animate-spin" />

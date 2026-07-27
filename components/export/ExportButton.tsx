@@ -11,8 +11,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ExportDialog } from "./ExportDialog";
+import type { ExportFilters } from "@/lib/export/export-params";
+import type { ExportFilterNames } from "@/lib/export/applied-filters";
 
-export type ExportType = "assignments" | "utilization" | "projects" | "conflicts";
+import type { ExportType } from "@/lib/export/export-types";
+import { VISIBLE_EXPORT_TYPES } from "@/lib/export/export-visibility";
+
+// Re-exported so existing importers (components/export/index.ts and friends)
+// keep resolving ExportType here, while the union itself lives in lib/.
+export type { ExportType };
 export type ExportFormat = "csv" | "excel";
 
 export type ExportOption = {
@@ -55,21 +62,39 @@ const EXPORT_OPTIONS: ExportOption[] = [
     formats: ["csv", "excel"],
     requireDateRange: true,
   },
+  {
+    type: "brand",
+    label: "Brand Report",
+    icon: "lucide:tag",
+    description: "Export brand-level summary",
+    formats: ["excel"],
+    requireDateRange: true,
+  },
+  {
+    type: "detailed",
+    label: "Detailed Data Report",
+    icon: "lucide:table",
+    description: "Planned hours per employee, project and month",
+    formats: ["excel"],
+    requireDateRange: true,
+  },
 ];
 
 interface ExportButtonProps {
-  filters?: {
-    brandId?: string | null;
-    departmentId?: string | null;
-    projectId?: string | null;
-    employeeIds?: string[];
-    startDate?: string;
-    endDate?: string;
-  };
+  filters?: ExportFilters & { startDate?: string; endDate?: string };
+  /** Display labels for filter ids, passed through to the dialog's filter panel. */
+  filterNames?: ExportFilterNames;
   disabled?: boolean;
 }
 
-export const ExportButton: React.FC<ExportButtonProps> = ({ filters, disabled }) => {
+// Only the types in VISIBLE_EXPORT_TYPES appear in the menu; the rest are
+// parked. Filtered here, not in EXPORT_OPTIONS, so every option definition
+// survives for a one-line revival.
+const VISIBLE_EXPORT_OPTIONS = EXPORT_OPTIONS.filter((option) =>
+  VISIBLE_EXPORT_TYPES.includes(option.type)
+);
+
+export const ExportButton: React.FC<ExportButtonProps> = ({ filters, filterNames, disabled }) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [selectedExport, setSelectedExport] = useState<ExportOption | null>(null);
 
@@ -94,7 +119,7 @@ export const ExportButton: React.FC<ExportButtonProps> = ({ filters, disabled })
             <p className="text-xs text-muted-foreground">Choose report type and format</p>
           </div>
           <DropdownMenuSeparator />
-          {EXPORT_OPTIONS.map((option) => (
+          {VISIBLE_EXPORT_OPTIONS.map((option) => (
             <DropdownMenuItem
               key={option.type}
               onClick={() => handleExportClick(option)}
@@ -103,11 +128,9 @@ export const ExportButton: React.FC<ExportButtonProps> = ({ filters, disabled })
               <div className="flex items-center w-full">
                 <Icon icon={option.icon} className="mr-2 h-4 w-4" />
                 <span className="font-medium">{option.label}</span>
-                {option.formats.includes("excel") && (
-                  <span className="ml-auto text-[10px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded">
-                    CSV + XLSX
-                  </span>
-                )}
+                <span className="ml-auto rounded bg-secondary px-1.5 py-0.5 text-[10px] text-secondary-foreground">
+                  {option.formats.map((f) => (f === "excel" ? "XLSX" : "CSV")).join(" + ")}
+                </span>
               </div>
               <p className="text-xs text-muted-foreground ml-6">{option.description}</p>
             </DropdownMenuItem>
@@ -121,6 +144,7 @@ export const ExportButton: React.FC<ExportButtonProps> = ({ filters, disabled })
           onOpenChange={setOpenDialog}
           exportOption={selectedExport}
           filters={filters}
+          filterNames={filterNames}
         />
       )}
     </>

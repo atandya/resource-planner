@@ -128,12 +128,12 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Apply brand filter if specified
+    // brandIds is accepted but NOT applied: exportData is assignments-based and
+    // carries no brand_id to filter on. Because it is not honored, it is absent
+    // from this export's entry in lib/export/applied-filters.ts, so the dialog
+    // neither sends it nor tells the user a brand filter was applied.
     let filteredData = exportData;
     if (brandIds) {
-      const brandIdArray = brandIds.split(',').map(id => parseInt(id, 10));
-      // Note: We can't filter by brand_id directly since we don't have it in exportData
-      // We would need to look up the brand from the campaign data
       console.log('[Export Projects] Brand filter specified but not implemented for assignments-based approach');
     }
 

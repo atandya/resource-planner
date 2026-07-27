@@ -38,6 +38,8 @@ import { hasBrandCriteria, hasProjectCriteria } from "@/lib/query/filterCriteria
 import type { ProjectOption } from "@/lib/query/hooks/useProjects";
 import type { Brand } from "@/lib/query/hooks/useBrands";
 import { useFilterPreviewStore } from "@/lib/timeline-v2/filter-preview-store";
+import { useTimelineViewStore } from "@/lib/timeline-v2/view-store";
+import { getTimelineExportDateRange } from "@/lib/timeline-v2/date-range";
 import type { TimelineProjectTypeScope } from "@/lib/timeline-v2/types";
 import { countMatchingEmployees } from "@/lib/timeline-v2/count-matching-employees";
 import { DASHBOARD_FEATURE_ENABLED } from "@/lib/dashboard/feature-flag";
@@ -101,12 +103,28 @@ export function HomeClient({
   const hasFullAccess = isFullAccess(session);
   const hasDashboardAccess = canAccessDashboard(session);
 
+  // Export defaults follow the timeline's visible range, snapped to whole
+  // months so the export dialog's month-grid picker can represent it.
+  const timelineViewMode = useTimelineViewStore((state) => state.viewMode);
+  const timelineAnchorDate = useTimelineViewStore((state) => state.anchorDate);
+  const timelineCustomRange = useTimelineViewStore((state) => state.customRange);
+  const timelineExportRange = getTimelineExportDateRange({
+    // The store anchor stays null until the user navigates (see Timeline.tsx),
+    // so mirror the timeline's own fallback to the server-provided anchor.
+    anchorDate: timelineAnchorDate ?? new Date(`${initialTimelineAnchor}T00:00:00`),
+    viewMode: timelineViewMode,
+    customRange: timelineCustomRange,
+  });
+
   // APPLIED ids flow to the timeline context; DRAFT objects live inside the
-  // FilterPanel until the user hits Apply.
-  const [appliedBrandIds, setAppliedBrandIds] = useState<string[]>([]);
+  // FilterPanel until the user hits Apply. Brands keep their objects because the
+  // export dialog names them — a raw brand id means nothing to a reader.
+  const [appliedBrands, setAppliedBrands] = useState<Brand[]>([]);
   const [appliedProjectIds, setAppliedProjectIds] = useState<string[]>([]);
   const [appliedDepartmentIds, setAppliedDepartmentIds] = useState<string[]>([]);
   const [appliedProjectTypeScope, setAppliedProjectTypeScope] = useState<TimelineProjectTypeScope>("all");
+
+  const appliedBrandIds = useMemo(() => appliedBrands.map((b) => b.id), [appliedBrands]);
 
   const [draftBrands, setDraftBrands] = useState<Brand[]>([]);
   const [draftProjects, setDraftProjects] = useState<ProjectOption[]>([]);
@@ -124,6 +142,17 @@ export function HomeClient({
   const [projectSearch, setProjectSearch] = useState("");
   const debouncedProjectSearch = useDebounce(projectSearch, 300);
   const { data: departments = [] } = useDepartments();
+
+  // Display names for the export dialog's seeded scope fields, so it labels the
+  // ids the timeline applied. Departments come from the same catalog the filter
+  // panel renders, since the applied department filter carries ids only.
+  const exportFilterNames = useMemo(
+    () => ({
+      brandIds: Object.fromEntries(appliedBrands.map((b) => [b.id, b.name])),
+      departmentIds: Object.fromEntries(departments.map((d) => [d.id, d.name])),
+    }),
+    [appliedBrands, departments]
+  );
 
   // Infinite filter catalogs: search and brand scope are server-side, so the
   // dropdown payload stays bounded as the directory grows. The project column
@@ -236,7 +265,7 @@ export function HomeClient({
   }, []);
 
   const handleApplyFilters = useCallback(() => {
-    setAppliedBrandIds(draftBrands.map((b) => b.id));
+    setAppliedBrands(draftBrands);
     setAppliedProjectIds(draftProjects.map((p) => p.id));
     setAppliedDepartmentIds(draftDepartmentIds);
     setAppliedProjectTypeScope(draftProjectTypeScope);
@@ -296,12 +325,13 @@ export function HomeClient({
           <div className="flex items-center gap-2 w-full sm:w-auto shrink-0 justify-end">
             <ExportButton
               filters={{
-                brandId: appliedBrandIds[0] ?? null,
-                departmentId: appliedDepartmentIds[0] ?? null,
-                projectId: appliedProjectIds[0] ?? null,
-                startDate: undefined,
-                endDate: undefined,
+                brandIds: appliedBrandIds,
+                departmentIds: appliedDepartmentIds,
+                projectIds: appliedProjectIds,
+                startDate: timelineExportRange?.startDate,
+                endDate: timelineExportRange?.endDate,
               }}
+              filterNames={exportFilterNames}
             />
             {DASHBOARD_FEATURE_ENABLED && hasDashboardAccess && (
               <Button asChild variant="outline" data-testid="open-dashboard-button">

@@ -1,0 +1,153 @@
+import { describe, it, expect } from 'vitest';
+import { buildBrandReportRows, type BrandReportInput } from '@/lib/export/brand-report';
+
+const emptyDirectory = {
+  projects: [] as BrandReportInput['projects'],
+  employees: [] as BrandReportInput['employees'],
+  brands: [] as BrandReportInput['brands'],
+};
+
+describe('buildBrandReportRows', () => {
+  it('rolls hours up to one row per brand+employee, split by project type', () => {
+    const input: BrandReportInput = {
+      engagements: [
+        { assignment_uuid: 'a1', employee_uuid: 'e1', project_key: 'campaign:p1' },
+        { assignment_uuid: 'a2', employee_uuid: 'e1', project_key: 'pitch:p2' },
+      ],
+      allocations: [
+        { assignment_uuid: 'a1', planned_hours: 100 },
+        { assignment_uuid: 'a1', planned_hours: 20.5 },
+        { assignment_uuid: 'a2', planned_hours: 30 },
+      ],
+      projects: [
+        { projectKey: 'campaign:p1', brandId: 'b1', brandName: 'BAF', sourceType: 'campaign' },
+        { projectKey: 'pitch:p2', brandId: 'b1', brandName: 'BAF', sourceType: 'pitch' },
+      ],
+      employees: [{ employeeUuid: 'e1', fullName: 'Andi' }],
+      brands: [{ brandId: 'b1', name: 'BAF' }],
+    };
+    expect(buildBrandReportRows(input)).toEqual([
+      { brand: 'BAF', employee: 'Andi', campaignHours: 120.5, pitchHours: 30, otherHours: 0, totalHours: 150.5 },
+    ]);
+  });
+
+  it('puts hours from an unresolved project type into otherHours', () => {
+    const input: BrandReportInput = {
+      engagements: [{ assignment_uuid: 'a1', employee_uuid: 'e1', project_key: 'excel:p1' }],
+      allocations: [{ assignment_uuid: 'a1', planned_hours: 15 }],
+      projects: [{ projectKey: 'excel:p1', brandId: 'b1', brandName: 'BAF', sourceType: null }],
+      employees: [{ employeeUuid: 'e1', fullName: 'Andi' }],
+      brands: [{ brandId: 'b1', name: 'BAF' }],
+    };
+    expect(buildBrandReportRows(input)).toEqual([
+      { brand: 'BAF', employee: 'Andi', campaignHours: 0, pitchHours: 0, otherHours: 15, totalHours: 15 },
+    ]);
+  });
+
+  it('drops employees whose total hours in range is zero', () => {
+    const input: BrandReportInput = {
+      ...emptyDirectory,
+      engagements: [{ assignment_uuid: 'a1', employee_uuid: 'e1', project_key: 'campaign:p1' }],
+      allocations: [],
+      projects: [{ projectKey: 'campaign:p1', brandId: 'b1', brandName: 'BAF', sourceType: 'campaign' }],
+      employees: [{ employeeUuid: 'e1', fullName: 'Andi' }],
+      brands: [{ brandId: 'b1', name: 'BAF' }],
+    };
+    expect(buildBrandReportRows(input)).toEqual([]);
+  });
+
+  it('honors the brand id filter', () => {
+    const input: BrandReportInput = {
+      engagements: [
+        { assignment_uuid: 'a1', employee_uuid: 'e1', project_key: 'campaign:p1' },
+        { assignment_uuid: 'a2', employee_uuid: 'e1', project_key: 'campaign:p2' },
+      ],
+      allocations: [
+        { assignment_uuid: 'a1', planned_hours: 10 },
+        { assignment_uuid: 'a2', planned_hours: 20 },
+      ],
+      projects: [
+        { projectKey: 'campaign:p1', brandId: 'b1', brandName: 'BAF', sourceType: 'campaign' },
+        { projectKey: 'campaign:p2', brandId: 'b2', brandName: 'Pegadaian', sourceType: 'campaign' },
+      ],
+      employees: [{ employeeUuid: 'e1', fullName: 'Andi' }],
+      brands: [{ brandId: 'b1', name: 'BAF' }, { brandId: 'b2', name: 'Pegadaian' }],
+      brandIdFilter: ['b1'],
+    };
+    expect(buildBrandReportRows(input)).toEqual([
+      { brand: 'BAF', employee: 'Andi', campaignHours: 10, pitchHours: 0, otherHours: 0, totalHours: 10 },
+    ]);
+  });
+
+  // Departments hang off the EMPLOYEE — the only department hook the data has.
+  // An employee with no department is excluded whenever a filter is active
+  // (the "(No department)" virtual option was consciously rejected).
+  const departmentFixture = (
+    departmentIdFilter: BrandReportInput['departmentIdFilter'],
+  ): BrandReportInput => ({
+    engagements: [
+      { assignment_uuid: 'a1', employee_uuid: 'e1', project_key: 'campaign:p1' },
+      { assignment_uuid: 'a2', employee_uuid: 'e2', project_key: 'campaign:p1' },
+      { assignment_uuid: 'a3', employee_uuid: 'e3', project_key: 'campaign:p1' },
+    ],
+    allocations: [
+      { assignment_uuid: 'a1', planned_hours: 10 },
+      { assignment_uuid: 'a2', planned_hours: 20 },
+      { assignment_uuid: 'a3', planned_hours: 30 },
+    ],
+    projects: [{ projectKey: 'campaign:p1', brandId: 'b1', brandName: 'BAF', sourceType: 'campaign' }],
+    employees: [
+      { employeeUuid: 'e1', fullName: 'Andi', departmentId: 'd1' },
+      { employeeUuid: 'e2', fullName: 'Budi', departmentId: 'd2' },
+      { employeeUuid: 'e3', fullName: 'Citra', departmentId: null },
+    ],
+    brands: [{ brandId: 'b1', name: 'BAF' }],
+    departmentIdFilter,
+  });
+
+  it("honors the department id filter, by the employee's department", () => {
+    expect(buildBrandReportRows(departmentFixture(['d1']))).toEqual([
+      { brand: 'BAF', employee: 'Andi', campaignHours: 10, pitchHours: 0, otherHours: 0, totalHours: 10 },
+    ]);
+  });
+
+  it('includes everyone — departmentless employees too — when no department filter is set', () => {
+    expect(buildBrandReportRows(departmentFixture(null)).map((r) => r.employee)).toEqual([
+      'Andi',
+      'Budi',
+      'Citra',
+    ]);
+    expect(buildBrandReportRows(departmentFixture(undefined)).map((r) => r.employee)).toEqual([
+      'Andi',
+      'Budi',
+      'Citra',
+    ]);
+    expect(buildBrandReportRows(departmentFixture([])).map((r) => r.employee)).toEqual([
+      'Andi',
+      'Budi',
+      'Citra',
+    ]);
+  });
+
+  it('keeps totalHours equal to the sum of the rounded per-type columns', () => {
+    const input: BrandReportInput = {
+      engagements: [
+        { assignment_uuid: 'a1', employee_uuid: 'e1', project_key: 'campaign:p1' },
+        { assignment_uuid: 'a2', employee_uuid: 'e1', project_key: 'pitch:p2' },
+      ],
+      allocations: [
+        { assignment_uuid: 'a1', planned_hours: 100.05 },
+        { assignment_uuid: 'a2', planned_hours: 100.05 },
+      ],
+      projects: [
+        { projectKey: 'campaign:p1', brandId: 'b1', brandName: 'BAF', sourceType: 'campaign' },
+        { projectKey: 'pitch:p2', brandId: 'b1', brandName: 'BAF', sourceType: 'pitch' },
+      ],
+      employees: [{ employeeUuid: 'e1', fullName: 'Andi' }],
+      brands: [{ brandId: 'b1', name: 'BAF' }],
+    };
+    const [row] = buildBrandReportRows(input);
+    expect(row.totalHours).toBe(row.campaignHours + row.pitchHours + row.otherHours);
+    expect(row).toEqual({ brand: 'BAF', employee: 'Andi', campaignHours: 100.1, pitchHours: 100.1, otherHours: 0, totalHours: 200.2 });
+  });
+});

@@ -1,0 +1,66 @@
+/**
+ * Which filters each export actually honors, and how to label them.
+ *
+ * The export routes don't all read the same params: the Brand Report and the
+ * Detailed Data Report filter on brandIds and departmentIds and ignore
+ * projectIds entirely, while Conflicts reads only employeeIds. Rendering an
+ * editor for every timeline filter would
+ * overstate the scope — it tells the user a filter is applied when the route
+ * throws it away, so the dialog's scope fields render only for honored keys.
+ *
+ * Keeping this beside the query builder means the dialog never has to know which
+ * route reads what. FILTER_LABELS supplies the scope fields' form labels.
+ */
+
+import type { ExportType } from "./export-types";
+import type { ExportFilters } from "./export-params";
+
+/** Derived from ExportFilters so a new filter can't be silently dropped here. */
+export type ExportFilterKey = keyof ExportFilters;
+
+/**
+ * What each app/api/export/* route actually APPLIES — which is not the same as
+ * what it reads. `projects` parses brandIds and then discards it (see the
+ * "not implemented" branch in app/api/export/projects/route.ts), so listing it
+ * here would make the dialog claim a brand scope the file doesn't have.
+ *
+ * `utilization` is the same story with departmentIds: both its routes do
+ * `departmentIds.split(',').map((id) => parseInt(id, 10))`, but planner
+ * department ids are UUIDs, so every parse is NaN and the filter matches
+ * nothing. Listing it would render a Departments picker over a dead filter —
+ * re-add the key if those routes ever compare ids as strings.
+ *
+ * A key missing from an entry means that export ignores that filter.
+ */
+const HONORED_FILTERS: Record<ExportType, readonly ExportFilterKey[]> = {
+  brand: ["brandIds", "departmentIds"],
+  detailed: ["brandIds", "departmentIds"],
+  projects: ["projectIds"],
+  assignments: ["projectIds"],
+  utilization: ["employeeIds"],
+  conflicts: ["employeeIds"],
+};
+
+export const FILTER_LABELS: Record<ExportFilterKey, { one: string; many: string }> = {
+  brandIds: { one: "Brand", many: "Brands" },
+  departmentIds: { one: "Department", many: "Departments" },
+  projectIds: { one: "Project", many: "Projects" },
+  employeeIds: { one: "Employee", many: "Employees" },
+};
+
+export function honorsFilter(exportType: ExportType, key: ExportFilterKey): boolean {
+  return HONORED_FILTERS[exportType].includes(key);
+}
+
+/** Only the filters this export will actually apply, dropping the rest. */
+export function selectHonoredFilters(exportType: ExportType, filters?: ExportFilters): ExportFilters {
+  const honored: ExportFilters = {};
+  for (const key of HONORED_FILTERS[exportType]) {
+    const values = filters?.[key]?.filter(Boolean) ?? [];
+    if (values.length) honored[key] = values;
+  }
+  return honored;
+}
+
+/** Display names keyed by filter id, so nothing depends on array positions. */
+export type ExportFilterNames = Partial<Record<ExportFilterKey, Record<string, string>>>;
