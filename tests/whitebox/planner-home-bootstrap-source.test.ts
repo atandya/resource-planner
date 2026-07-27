@@ -13,7 +13,10 @@ describe("planner home bootstrap server composer", () => {
     expect(source).toContain("plannerDirectoryRepository.listTimelineEmployees");
     expect(source).toContain("plannerDirectoryRepository.listProjectsForBootstrap");
     expect(source).toContain("plannerDirectoryRepository.listBrandsByIds");
-    expect(source).toContain("syncMode: latestInFlightSync?.syncMode ?? null");
+    expect(source).toContain("metadataPartial: boolean");
+    expect(source).toContain("freshness: {");
+    expect(source).toContain("directoryFetchedAt: string");
+    expect(source).not.toContain("metadataFreshness");
     expect(source).not.toContain("fetchOrderedEmployeeSlice");
     expect(source).not.toContain("fetchProjectSummaries");
   });

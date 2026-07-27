@@ -218,7 +218,6 @@ export function Timeline({
     assignments: dateFilteredAssignments,
     brandsById,
     projectsById,
-    metadataFreshness,
     hasBootstrapData,
     isLoadingBootstrap,
     isFetchingBootstrap,
@@ -354,19 +353,7 @@ export function Timeline({
     });
   }, [columns.columns.length, isInitialTimelineLoading, visibleIds.length]);
 
-  const plannerFreshnessState = useMemo(() => {
-    if (metadataFreshness) {
-      if (metadataFreshness.state === "syncing") {
-        return { tone: "syncing" as const, message: "Refreshing planner directory..." };
-      }
-      if (metadataFreshness.state === "stale") {
-        return { tone: "warning" as const, message: "Showing saved planner data. Directory sync is stale." };
-      }
-      if (metadataFreshness.state === "unavailable") {
-        return { tone: "warning" as const, message: "Showing saved planner data. Directory sync is unavailable." };
-      }
-    }
-
+  const plannerDataStatus = useMemo(() => {
     if (isBootstrapRefetchError) {
       return { tone: "warning" as const, message: "Showing saved planner data. Refresh failed." };
     }
@@ -376,7 +363,7 @@ export function Timeline({
     }
 
     return null;
-  }, [hasBootstrapData, isBootstrapRefetchError, isFetchingBootstrap, metadataFreshness]);
+  }, [hasBootstrapData, isBootstrapRefetchError, isFetchingBootstrap]);
 
   const canEditAssignments = rowLoadingState.canEditAssignments && !!session?.access?.can_view_all;
   useEffect(() => {
@@ -397,8 +384,8 @@ export function Timeline({
       data-testid="timeline-v2-root"
     >
       <TimelineToolbar currentDate={currentDate} />
-      {plannerFreshnessState ? (
-        <DataStatus tone={plannerFreshnessState.tone} message={plannerFreshnessState.message} />
+      {plannerDataStatus ? (
+        <DataStatus tone={plannerDataStatus.tone} message={plannerDataStatus.message} />
       ) : null}
 
       {isInitialTimelineLoading ? (

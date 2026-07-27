@@ -1,7 +1,6 @@
 export type PlannerDirectorySourceType = "campaign" | "pitch";
 export type PlannerSyncMode = "full_backfill" | "incremental_refresh" | "targeted_repair";
 export type PlannerSyncStatus = "queued" | "running" | "succeeded" | "failed" | "skipped";
-export type PlannerFreshnessState = "healthy" | "stale" | "syncing" | "unavailable";
 
 export type PlannerDirectoryIssueSeverity = "info" | "warning" | "error";
 
@@ -109,14 +108,6 @@ export type PlannerDirectorySyncIssue = {
   createdAt: string;
 };
 
-export type PlannerDirectoryFreshness = {
-  state: PlannerFreshnessState;
-  lastSuccessfulSyncAt: string | null;
-  latestSyncAt: string | null;
-  stale: boolean;
-  issueCount: number;
-};
-
 const PLANNER_DIRECTORY_SOURCE_TYPES: PlannerDirectorySourceType[] = ["campaign", "pitch"];
 const PLANNER_SYNC_MODES: PlannerSyncMode[] = [
   "full_backfill",
@@ -129,12 +120,6 @@ const PLANNER_SYNC_STATUSES: PlannerSyncStatus[] = [
   "succeeded",
   "failed",
   "skipped",
-];
-const PLANNER_FRESHNESS_STATES: PlannerFreshnessState[] = [
-  "healthy",
-  "stale",
-  "syncing",
-  "unavailable",
 ];
 
 export function buildPlannerProjectKey(sourceType: PlannerDirectorySourceType, sourceId: string): string {
@@ -151,8 +136,4 @@ export function isPlannerSyncMode(value: string): value is PlannerSyncMode {
 
 export function isPlannerSyncStatus(value: string): value is PlannerSyncStatus {
   return PLANNER_SYNC_STATUSES.includes(value as PlannerSyncStatus);
-}
-
-export function isPlannerFreshnessState(value: string): value is PlannerFreshnessState {
-  return PLANNER_FRESHNESS_STATES.includes(value as PlannerFreshnessState);
 }

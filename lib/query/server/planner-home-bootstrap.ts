@@ -1,7 +1,6 @@
 import type { SessionData } from "@/lib/auth/session";
 import { requestPlannerDirectoryRepair } from "@/lib/planner-directory/repair";
 import { plannerDirectoryRepository } from "@/lib/planner-directory/repository";
-import { classifyPlannerDirectoryFreshness } from "@/lib/planner-directory/freshness";
 import type {
   PlannerDirectoryBrandRow,
   PlannerDirectoryDepartmentRow,
@@ -90,13 +89,6 @@ export type PlannerHomeBootstrapResponse = {
   projectsById: Record<string, BootstrapProject>;
   plannerTimeline: PlannerTimelineResponse;
   metadataPartial: boolean;
-  metadataFreshness: {
-    state: "healthy" | "stale" | "syncing" | "unavailable";
-    lastSuccessfulSyncAt: string | null;
-    latestSyncAt: string | null;
-    stale: boolean;
-    issueCount: number;
-  };
   freshness: {
     directoryFetchedAt: string;
     plannerFetchedAt: string;
@@ -190,9 +182,7 @@ export async function fetchPlannerHomeBootstrap(
   });
   const pageEmployeeUuids = employeeRows.map((employee) => employee.employeeUuid);
 
-  const [latestSuccessfulSync, latestInFlightSync, departments, plannerTimeline] = await Promise.all([
-    plannerDirectoryRepository.getLatestSuccessfulSync(),
-    plannerDirectoryRepository.getLatestInFlightSync(),
+  const [departments, plannerTimeline] = await Promise.all([
     plannerDirectoryRepository.listDepartments(),
     pageEmployeeUuids.length > 0
       ? fetchPlannerTimeline(session, request, { employeeUuids: pageEmployeeUuids })
@@ -200,15 +190,6 @@ export async function fetchPlannerHomeBootstrap(
         // guard, an empty IN-list would fall through to a company-wide query.
         Promise.resolve({ request, assignments: [] } satisfies PlannerTimelineResponse),
   ]);
-
-  const metadataFreshness = classifyPlannerDirectoryFreshness({
-    lastSuccessfulSyncAt: latestSuccessfulSync?.finishedAt ?? latestSuccessfulSync?.startedAt ?? null,
-    latestSyncAt: latestInFlightSync?.startedAt ?? latestSuccessfulSync?.startedAt ?? null,
-    isSyncing: !!latestInFlightSync,
-    syncMode: latestInFlightSync?.syncMode ?? null,
-    issueCount: latestSuccessfulSync?.issueCount ?? 0,
-    now: directoryFetchedAt,
-  });
 
   const departmentsById = indexById(departments.map(toBootstrapDepartment), (department) => department.departmentId);
 
@@ -291,7 +272,6 @@ export async function fetchPlannerHomeBootstrap(
     projectsById,
     plannerTimeline,
     metadataPartial,
-    metadataFreshness,
     freshness: {
       directoryFetchedAt,
       plannerFetchedAt: directoryFetchedAt,
