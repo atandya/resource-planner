@@ -635,68 +635,6 @@ export function createPlannerDirectoryRepository(options: PlannerDirectoryReposi
       : null;
   }
 
-  async function getLatestSuccessfulSync(): Promise<PlannerDirectorySyncRun | null> {
-    const result = await db.query(
-      `SELECT * FROM planner_directory_sync_runs WHERE status = ${dialect === "postgresql" ? "$1" : "?"} ORDER BY finished_at DESC NULLS LAST, started_at DESC LIMIT 1`,
-      ["succeeded"]
-    );
-    const row = readFirstRow<DbRow>(result);
-    return row
-      ? {
-          syncRunId: String(row.sync_run_id ?? row.syncRunId),
-          syncMode: String(row.sync_mode ?? row.syncMode ?? "full_backfill") as PlannerSyncMode,
-          status: String(row.status ?? "succeeded") as PlannerSyncStatus,
-          startedAt: String(row.started_at ?? row.startedAt ?? now()),
-          finishedAt: row.finished_at ? String(row.finished_at) : null,
-          triggeredBy: row.triggered_by ? String(row.triggered_by) : null,
-          triggerSource: row.trigger_source ? String(row.trigger_source) : null,
-          employeesSeen: Number(row.employees_seen ?? 0),
-          employeesUpserted: Number(row.employees_upserted ?? 0),
-          departmentsSeen: Number(row.departments_seen ?? 0),
-          departmentsUpserted: Number(row.departments_upserted ?? 0),
-          brandsSeen: Number(row.brands_seen ?? 0),
-          brandsUpserted: Number(row.brands_upserted ?? 0),
-          projectsSeen: Number(row.projects_seen ?? 0),
-          projectsUpserted: Number(row.projects_upserted ?? 0),
-          recordsArchived: Number(row.records_archived ?? 0),
-          issueCount: Number(row.issue_count ?? 0),
-          errorMessage: row.error_message ? String(row.error_message) : null,
-          metadata: row.metadata ? (typeof row.metadata === "string" ? JSON.parse(String(row.metadata)) : (row.metadata as Record<string, unknown>)) : null,
-        }
-      : null;
-  }
-
-  async function getLatestInFlightSync(): Promise<PlannerDirectorySyncRun | null> {
-    const result = await db.query(
-      `SELECT * FROM planner_directory_sync_runs WHERE status IN (${dialect === "postgresql" ? "$1, $2" : "?, ?"}) ORDER BY started_at DESC LIMIT 1`,
-      ["queued", "running"]
-    );
-    const row = readFirstRow<DbRow>(result);
-    return row
-      ? {
-          syncRunId: String(row.sync_run_id ?? row.syncRunId),
-          syncMode: String(row.sync_mode ?? row.syncMode ?? "full_backfill") as PlannerSyncMode,
-          status: String(row.status ?? "queued") as PlannerSyncStatus,
-          startedAt: String(row.started_at ?? row.startedAt ?? now()),
-          finishedAt: row.finished_at ? String(row.finished_at) : null,
-          triggeredBy: row.triggered_by ? String(row.triggered_by) : null,
-          triggerSource: row.trigger_source ? String(row.trigger_source) : null,
-          employeesSeen: Number(row.employees_seen ?? 0),
-          employeesUpserted: Number(row.employees_upserted ?? 0),
-          departmentsSeen: Number(row.departments_seen ?? 0),
-          departmentsUpserted: Number(row.departments_upserted ?? 0),
-          brandsSeen: Number(row.brands_seen ?? 0),
-          brandsUpserted: Number(row.brands_upserted ?? 0),
-          projectsSeen: Number(row.projects_seen ?? 0),
-          projectsUpserted: Number(row.projects_upserted ?? 0),
-          recordsArchived: Number(row.records_archived ?? 0),
-          issueCount: Number(row.issue_count ?? 0),
-          errorMessage: row.error_message ? String(row.error_message) : null,
-          metadata: row.metadata ? (typeof row.metadata === "string" ? JSON.parse(String(row.metadata)) : (row.metadata as Record<string, unknown>)) : null,
-        }
-      : null;
-  }
-
   async function listDepartments(): Promise<PlannerDirectoryDepartmentRow[]> {
     const result = await db.query(
       `SELECT * FROM planner_departments ORDER BY name ASC`
@@ -1175,8 +1113,6 @@ export function createPlannerDirectoryRepository(options: PlannerDirectoryReposi
     updateSyncRun,
     addSyncIssue,
     getSyncRunById,
-    getLatestSuccessfulSync,
-    getLatestInFlightSync,
     listDepartments,
     listDepartmentsForFilterOptions,
     listBrands,

@@ -3,32 +3,6 @@ import { createPlannerDirectoryRepository } from "@/lib/planner-directory/reposi
 
 function createMockDb() {
   const query = vi.fn(async (sql: string) => {
-    if (sql.startsWith("SELECT * FROM planner_directory_sync_runs WHERE status")) {
-      return [
-        [
-          {
-            sync_run_id: "run-2",
-            sync_mode: "incremental_refresh",
-            status: "succeeded",
-            started_at: "2026-06-05T00:00:00.000Z",
-            finished_at: "2026-06-05T00:01:00.000Z",
-            employees_seen: 2,
-            employees_upserted: 2,
-            departments_seen: 1,
-            departments_upserted: 1,
-            brands_seen: 3,
-            brands_upserted: 3,
-            projects_seen: 4,
-            projects_upserted: 4,
-            records_archived: 0,
-            issue_count: 0,
-            error_message: null,
-            metadata: JSON.stringify({ source: "schedule" }),
-          },
-        ],
-      ];
-    }
-
     if (sql.startsWith("SELECT * FROM planner_directory_sync_runs WHERE sync_run_id")) {
       return [
         [
@@ -62,7 +36,7 @@ function createMockDb() {
 }
 
 describe("planner directory repository", () => {
-  it("creates queued sync runs and reads the latest success record", async () => {
+  it("creates queued sync runs", async () => {
     const db = createMockDb();
     const repository = createPlannerDirectoryRepository({
       db,
@@ -84,10 +58,6 @@ describe("planner directory repository", () => {
       expect.stringContaining("INSERT INTO planner_directory_sync_runs"),
       expect.arrayContaining(["run-1", "full_backfill", "queued"])
     );
-
-    const latest = await repository.getLatestSuccessfulSync();
-    expect(latest?.syncRunId).toBe("run-2");
-    expect(latest?.status).toBe("succeeded");
   });
 
   it("upserts directory rows instead of duplicating them", async () => {

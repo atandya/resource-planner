@@ -47,8 +47,6 @@ describe("planner directory repair", () => {
         metadata: updates.metadata ?? null,
       })),
       upsertProjects: vi.fn(async (rows) => rows.length),
-      getLatestSuccessfulSync: vi.fn(async () => null),
-      getLatestInFlightSync: vi.fn(async () => null),
     };
     const source = {
       fetchDepartments: vi.fn(async () => ({ records: [] })),

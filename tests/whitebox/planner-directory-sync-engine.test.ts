@@ -130,7 +130,6 @@ function createRepository() {
     upsertProjects: vi.fn(async (rows) => rows.length),
     upsertEmployees: vi.fn(async (rows) => rows.length),
     markMissingAsArchived: vi.fn(async ({ seenIds }) => seenIds.length),
-    getLatestSuccessfulSync: vi.fn(async () => null),
     addSyncIssue: vi.fn(async () => null),
   };
 

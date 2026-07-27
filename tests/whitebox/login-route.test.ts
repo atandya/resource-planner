@@ -9,16 +9,9 @@ vi.mock("@/lib/api/timetrack-client", () => ({
   getUserWithProfile: vi.fn(),
   getDepartment: vi.fn(),
 }));
-vi.mock("@/lib/planner-directory/repository", () => ({
-  plannerDirectoryRepository: {
-    getLatestSuccessfulSync: vi.fn(async () => {
-      throw new Error("directory freshness must not be read during login");
-    }),
-  },
-}));
 
 describe("login route", () => {
-  it("succeeds without reading planner-directory freshness", async () => {
+  it("creates a session after credential and profile lookups", async () => {
     vi.mocked(login).mockResolvedValue({
       success: true,
       data: { access_token: "token", user: { id: 1, email: "ada@example.com" } },
