@@ -50,6 +50,8 @@ export interface MySqlBrand {
   description: string;
   logo: string;
   flag: 'active' | 'inactive';
+  // Explicit archive flag from the restricted read API (preferred over flag when present)
+  is_active?: boolean;
   tax_account: string;
   top: string | null;
   created_at: string;
@@ -63,6 +65,8 @@ export interface MySqlCampaign {
   io_number: string;
   campaign_name: string;
   brand_id: number;
+  // Explicit brand uuid from the restricted read API (preferred over nested brand.uuid when present)
+  brand_uuid?: string;
   company_id: number;
   currency: string;
   budget: number;
@@ -74,6 +78,8 @@ export interface MySqlCampaign {
   io_file: string;
   state: 'draft' | 'publish' | 'archive';
   flag: 'active' | 'inactive';
+  // Explicit archive flag from the restricted read API (preferred over flag/state when present)
+  is_active?: boolean;
   quotation_reference: string;
   created_at: string;
   updated_at: string;
@@ -100,9 +106,13 @@ export interface MySqlPitch {
   pitch_number: string;
   pitch_name: string;
   brand_id: number;
+  // Explicit brand uuid from the restricted read API (preferred over nested brand.uuid when present)
+  brand_uuid?: string;
   region: 'ID' | 'SG' | null;
   date_submit: string | null;
   status: 'on_going' | 'win' | 'loss' | null;
+  // Explicit archive flag from the restricted read API (preferred over status when present)
+  is_active?: boolean;
   budget: number;
   value_total: number;
   currency: string;

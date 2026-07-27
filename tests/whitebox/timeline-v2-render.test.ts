@@ -46,7 +46,7 @@ vi.mock("@/lib/query/hooks/usePlannerHomeBootstrap", () => ({
       },
       metadataPartial: false,
       metadataFreshness: {
-        state: "healthy",
+        state: "stale",
         lastSuccessfulSyncAt: null,
         latestSyncAt: null,
         stale: false,
@@ -104,5 +104,7 @@ describe("timeline-v2 render smoke test", () => {
     expect(html).toContain("timeline-v2-header-controls");
     expect(html).toContain("timeline-v2-today-button");
     expect(html).toContain("timeline-v2-initial-skeleton");
+    expect(html).not.toContain("Directory sync is stale.");
+    expect(html).not.toContain("Directory sync is unavailable.");
   });
 });

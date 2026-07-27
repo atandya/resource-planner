@@ -4,23 +4,6 @@ import { determineAccessLevel } from '@/lib/auth/access-level';
 import { createSession, SessionData } from '@/lib/auth/session';
 import { getMySqlApiClient } from '@/lib/mysql/api-client';
 import { createRequestTiming } from '@/lib/observability/request-timing';
-import { plannerDirectoryRepository } from '@/lib/planner-directory/repository';
-import { requestPlannerDirectorySyncIfStale } from '@/lib/planner-directory/sync-trigger';
-
-const DIRECTORY_FRESHNESS_MAX_AGE_MS = 15 * 60 * 1000;
-
-function classifyFreshness(latestSyncAt: string | null): "healthy" | "stale" | "unavailable" {
-  if (!latestSyncAt) {
-    return "unavailable";
-  }
-
-  const ageMs = Date.now() - new Date(latestSyncAt).getTime();
-  if (!Number.isFinite(ageMs)) {
-    return "unavailable";
-  }
-
-  return ageMs <= DIRECTORY_FRESHNESS_MAX_AGE_MS ? "healthy" : "stale";
-}
 
 export async function POST(request: NextRequest) {
   const timing = createRequestTiming("login_api");
@@ -175,20 +158,6 @@ export async function POST(request: NextRequest) {
     // 6. Set session cookie
     await createSession(session);
     timing.phase("session_creation");
-
-    const latestSuccessfulSync = await plannerDirectoryRepository.getLatestSuccessfulSync();
-    const freshnessState = classifyFreshness(latestSuccessfulSync?.finishedAt ?? latestSuccessfulSync?.startedAt ?? null);
-    if (freshnessState !== "healthy") {
-      void requestPlannerDirectorySyncIfStale({
-        session,
-        freshnessState,
-        syncMode: "incremental_refresh",
-        triggerSource: "login",
-        triggeredBy: session.employee.uuid,
-      }).catch((backgroundError) => {
-        console.error("[Login API] Failed to queue planner directory sync:", backgroundError);
-      });
-    }
 
     // Return session data (without sensitive token in response body)
     const sessionResponse = {

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   buildPlannerProjectKey,
-  isPlannerFreshnessState,
   isPlannerProjectSourceType,
   isPlannerSyncMode,
   isPlannerSyncStatus,
@@ -31,13 +30,5 @@ describe("planner directory types", () => {
     expect(isPlannerSyncStatus("failed")).toBe(true);
     expect(isPlannerSyncStatus("skipped")).toBe(true);
     expect(isPlannerSyncStatus("pending")).toBe(false);
-  });
-
-  it("recognizes the allowed freshness states", () => {
-    expect(isPlannerFreshnessState("healthy")).toBe(true);
-    expect(isPlannerFreshnessState("stale")).toBe(true);
-    expect(isPlannerFreshnessState("syncing")).toBe(true);
-    expect(isPlannerFreshnessState("unavailable")).toBe(true);
-    expect(isPlannerFreshnessState("unknown")).toBe(false);
   });
 });

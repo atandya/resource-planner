@@ -12,7 +12,6 @@ const EMPTY = {
   assignments: [] as PlannerHomeBootstrapResponse["plannerTimeline"]["assignments"],
   brandsById: {} as PlannerHomeBootstrapResponse["brandsById"],
   projectsById: {} as PlannerHomeBootstrapResponse["projectsById"],
-  metadataFreshness: null as PlannerHomeBootstrapResponse["metadataFreshness"] | null,
 };
 
 // ONE windowed query feeds the timeline. Brand/project/department/search are
@@ -34,7 +33,6 @@ export function useTimelineEmployees({ request, initialBootstrap }: UseTimelineE
         assignments: data.plannerTimeline.assignments,
         brandsById: data.brandsById,
         projectsById: data.projectsById,
-        metadataFreshness: data.metadataFreshness,
       }
     : EMPTY;
 
@@ -43,7 +41,6 @@ export function useTimelineEmployees({ request, initialBootstrap }: UseTimelineE
     assignments: merged.assignments,
     brandsById: merged.brandsById,
     projectsById: merged.projectsById,
-    metadataFreshness: merged.metadataFreshness,
     hasBootstrapData: !!data,
     isLoadingBootstrap: query.isLoading,
     isFetchingBootstrap: query.isFetching,
