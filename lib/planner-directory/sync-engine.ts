@@ -90,6 +90,8 @@ const defaultSource: PlannerDirectorySource = {
   fetchEmployeeByUuid: (session, sourceEmployeeUuid) => fetchTimetrackEmployeeByUuid(session, sourceEmployeeUuid),
 };
 
+const EXCEL_PROJECT_SOURCE_ID_PREFIX = "excel-";
+
 function nowIso(now?: () => string): string {
   return now ? now() : new Date().toISOString();
 }
@@ -355,6 +357,7 @@ async function runBackfill(
       entity: "project",
       seenIds: projects.rows.map((row) => row.projectKey),
       archivedAt: now(),
+      preserveProjectSourceIdPrefixes: [EXCEL_PROJECT_SOURCE_ID_PREFIX],
     }),
     repository.markMissingAsArchived({
       entity: "employee",
@@ -456,6 +459,7 @@ async function runIncremental(
       entity: "project",
       seenIds: projects.rows.map((row) => row.projectKey),
       archivedAt: now(),
+      preserveProjectSourceIdPrefixes: [EXCEL_PROJECT_SOURCE_ID_PREFIX],
     }),
     repository.markMissingAsArchived({
       entity: "employee",

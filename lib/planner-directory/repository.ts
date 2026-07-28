@@ -407,6 +407,7 @@ export function createPlannerDirectoryRepository(options: PlannerDirectoryReposi
     entity: "department" | "brand" | "project" | "employee";
     seenIds: string[];
     archivedAt?: string;
+    preserveProjectSourceIdPrefixes?: string[];
   }): Promise<number> {
     // Never archive the whole table when a sync saw nothing — see archive-guard.ts.
     if (shouldSkipArchive(args.seenIds)) return 0;
@@ -419,18 +420,28 @@ export function createPlannerDirectoryRepository(options: PlannerDirectoryReposi
     } as const;
     const target = tableMap[args.entity];
     const params: unknown[] = [archivedAt];
-    const whereClause =
-      args.seenIds.length > 0
-        ? (() => {
-            const placeholders = args.seenIds
-              .map((seenId) => {
-                params.push(seenId);
-                return dialect === "postgresql" ? `$${params.length}` : "?";
-              })
-              .join(", ");
-            return `WHERE ${target.key} NOT IN (${placeholders})`;
-          })()
-        : "";
+    const predicates: string[] = [];
+
+    if (args.seenIds.length > 0) {
+      const placeholders = args.seenIds
+        .map((seenId) => {
+          params.push(seenId);
+          return dialect === "postgresql" ? `$${params.length}` : "?";
+        })
+        .join(", ");
+      predicates.push(`${target.key} NOT IN (${placeholders})`);
+    }
+
+    if (args.entity === "project") {
+      for (const prefix of args.preserveProjectSourceIdPrefixes ?? []) {
+        params.push(`${prefix}%`);
+        const placeholder = dialect === "postgresql" ? `$${params.length}` : "?";
+        // NULL source ids are not Excel imports and must remain eligible for archival.
+        predicates.push(`(source_project_id IS NULL OR source_project_id NOT LIKE ${placeholder})`);
+      }
+    }
+
+    const whereClause = predicates.length > 0 ? `WHERE ${predicates.join(" AND ")}` : "";
     const sql = `UPDATE ${target.table} SET archived_at = ${dialect === "postgresql" ? "$1" : "?"} ${whereClause}`;
     await db.query(sql, params);
     // Archiving rewrites archived_at, so any cached snapshot of this entity is stale.

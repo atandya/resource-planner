@@ -135,6 +135,30 @@ describe("planner directory repository", () => {
     );
   });
 
+  it("preserves Excel projects while archiving TimeTrack projects missing from a sync", async () => {
+    const db = createMockDb();
+    const repository = createPlannerDirectoryRepository({
+      db,
+      now: () => "2026-06-05T00:00:00.000Z",
+      syncRunIdFactory: () => "run-1",
+      issueIdFactory: () => "issue-1",
+    });
+
+    await repository.markMissingAsArchived({
+      entity: "project",
+      seenIds: ["campaign:timetrack-1"],
+      archivedAt: "2026-06-05T00:00:00.000Z",
+      preserveProjectSourceIdPrefixes: ["excel-"],
+    });
+
+    const [sql, params] = db.query.mock.calls[0] ?? [];
+    expect(String(sql)).toContain("project_key NOT IN");
+    expect(String(sql)).toContain("source_project_id NOT LIKE");
+    expect(params).toEqual(
+      expect.arrayContaining(["2026-06-05T00:00:00.000Z", "campaign:timetrack-1", "excel-%"])
+    );
+  });
+
   it("splits large project upserts into multiple queries", async () => {
     const db = createMockDb();
     const repository = createPlannerDirectoryRepository({

@@ -374,6 +374,12 @@ describe("planner directory sync engine", () => {
     expect(result.status).toBe("succeeded");
     expect(repository.upsertEmployees).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ employeeUuid: "emp-1" })]));
     expect(repository.markMissingAsArchived).toHaveBeenCalled();
+    expect(repository.markMissingAsArchived).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entity: "project",
+        preserveProjectSourceIdPrefixes: ["excel-"],
+      })
+    );
   });
 
   it("only updates changed rows during incremental refresh", async () => {
@@ -411,6 +417,12 @@ describe("planner directory sync engine", () => {
     expect(result.status).toBe("succeeded");
     expect(repository.upsertEmployees).toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ employeeUuid: "emp-1" })]));
     expect(repository.listEmployees).toHaveBeenCalled();
+    expect(repository.markMissingAsArchived).toHaveBeenCalledWith(
+      expect.objectContaining({
+        entity: "project",
+        preserveProjectSourceIdPrefixes: ["excel-"],
+      })
+    );
   });
 
   it("reads existing rows past the cache so the changed-row diff can't go stale", async () => {
