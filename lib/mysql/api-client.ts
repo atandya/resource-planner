@@ -108,8 +108,9 @@ class MySqlApiClient {
     }
 
     const parsedDate = Date.parse(value);
-    if (Number.isNaN(parsedDate) || parsedDate < this.now()) return undefined;
-    return Math.max(0, parsedDate - this.now());
+    const now = this.now();
+    if (Number.isNaN(parsedDate) || parsedDate < now) return undefined;
+    return Math.max(0, parsedDate - now);
   }
 
   private jitteredRetryDelay(attempt: number): number {
@@ -123,21 +124,28 @@ class MySqlApiClient {
     retryDelay: number,
   ): Promise<Response> {
     const operation = async (control?: { deferFor(ms: number): void }): Promise<Response> => {
-      const response = await fetch(url, options);
+      const controller = new AbortController();
+      const timeoutId = this.createTimeoutController(controller);
 
-      if (!response.ok) {
-        const retryAfterMs = response.status === 429
-          ? this.parseRetryAfter(response.headers.get('retry-after'))
-          : undefined;
+      try {
+        const response = await fetch(url, { ...options, signal: controller.signal });
 
-        if (response.status === 429) {
-          control?.deferFor(retryAfterMs ?? retryDelay);
+        if (!response.ok) {
+          const retryAfterMs = response.status === 429
+            ? this.parseRetryAfter(response.headers.get('retry-after'))
+            : undefined;
+
+          if (response.status === 429) {
+            control?.deferFor(retryAfterMs ?? retryDelay);
+          }
+
+          throw new MySqlApiError(`API Error: ${response.statusText}`, response.status, retryAfterMs);
         }
 
-        throw new MySqlApiError(`API Error: ${response.statusText}`, response.status, retryAfterMs);
+        return response;
+      } finally {
+        clearTimeout(timeoutId);
       }
-
-      return response;
     };
 
     return this.requestPacer
@@ -230,10 +238,6 @@ class MySqlApiClient {
           });
         }
 
-        // Set up timeout
-        const controller = new AbortController();
-        const timeoutId = this.createTimeoutController(controller);
-
         try {
           // Make request with Bearer token and timeout signal
           const response = await this.rawFetch(url.toString(), {
@@ -242,12 +246,8 @@ class MySqlApiClient {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
             },
-            signal: controller.signal,
             cache: 'no-store',
           }, rateLimitRetryDelay);
-
-          // Clear timeout on successful response
-          clearTimeout(timeoutId);
 
           if (this.shouldLog()) {
             console.log('[MySqlApiClient] Response:', {
@@ -298,9 +298,6 @@ class MySqlApiClient {
           // Success! Return the data
           return data;
         } catch (fetchError) {
-          // Clear timeout if still active
-          clearTimeout(timeoutId);
-
           // Classify the error
           const errorType = this.classifyError(fetchError);
           lastError = fetchError;
@@ -515,10 +512,6 @@ class MySqlApiClient {
           });
         }
 
-        // Set up timeout
-        const controller = new AbortController();
-        const timeoutId = this.createTimeoutController(controller);
-
         try {
           // Prepare request options
           const options: RequestInit = {
@@ -528,7 +521,6 @@ class MySqlApiClient {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
             },
-            signal: controller.signal,
             cache: 'no-store',
           };
 
@@ -539,9 +531,6 @@ class MySqlApiClient {
 
           // Make request
           const response = await this.rawFetch(url.toString(), options, rateLimitRetryDelay);
-
-          // Clear timeout on successful response
-          clearTimeout(timeoutId);
 
           if (this.shouldLog()) {
             console.log(`[MySqlApiClient] ${method} Response:`, {
@@ -592,9 +581,6 @@ class MySqlApiClient {
           // Success! Return the data
           return responseData;
         } catch (fetchError) {
-          // Clear timeout if still active
-          clearTimeout(timeoutId);
-
           // Classify the error
           const errorType = this.classifyError(fetchError);
           lastError = fetchError;
