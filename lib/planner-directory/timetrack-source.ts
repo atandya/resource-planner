@@ -1,4 +1,5 @@
 import { createMySqlApiClient } from "@/lib/mysql/api-client";
+import { createTimeTrackRequestPacer } from "@/lib/planner-directory/timetrack-request-pacer";
 import type { SessionData } from "@/lib/auth/session";
 import type { MySqlApiResponse } from "@/lib/types/mysql";
 import type {
@@ -18,6 +19,9 @@ import { buildPlannerProjectKey } from "@/lib/planner-directory/types";
 import type { PlannerDirectoryIssueSeverity } from "@/lib/planner-directory/types";
 
 const DEFAULT_PAGE_SIZE = 100;
+const directoryRequestPacer = createTimeTrackRequestPacer({
+  minimumIntervalMs: 1_500,
+});
 
 type PaginatedSourceResponse<T> = MySqlApiResponse<T[]>;
 
@@ -45,6 +49,12 @@ type TimetrackDepartmentRecord = {
   updated_at?: string;
   flag?: string | null;
 };
+
+function createDirectoryApiClient(session: SessionData) {
+  return createMySqlApiClient(async () => session.access_token, {
+    requestPacer: directoryRequestPacer,
+  });
+}
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -145,7 +155,7 @@ async function fetchAllPages<T>(
 }
 
 export async function fetchTimetrackDepartments(session: SessionData): Promise<SourceFetchResult<TimetrackDepartmentRecord>> {
-  const client = createMySqlApiClient(async () => session.access_token);
+  const client = createDirectoryApiClient(session);
 
   return fetchAllPages("departments", (page) =>
     client.getDepartments({
@@ -156,7 +166,7 @@ export async function fetchTimetrackDepartments(session: SessionData): Promise<S
 }
 
 export async function fetchTimetrackBrands(session: SessionData): Promise<SourceFetchResult<MySqlBrand>> {
-  const client = createMySqlApiClient(async () => session.access_token);
+  const client = createDirectoryApiClient(session);
 
   return fetchAllPages("brands", (page) =>
     client.getBrands({
@@ -167,7 +177,7 @@ export async function fetchTimetrackBrands(session: SessionData): Promise<Source
 }
 
 export async function fetchTimetrackCampaigns(session: SessionData): Promise<SourceFetchResult<MySqlCampaign>> {
-  const client = createMySqlApiClient(async () => session.access_token);
+  const client = createDirectoryApiClient(session);
 
   return fetchAllPages("campaigns", (page) =>
     client.getCampaigns({
@@ -178,7 +188,7 @@ export async function fetchTimetrackCampaigns(session: SessionData): Promise<Sou
 }
 
 export async function fetchTimetrackPitches(session: SessionData): Promise<SourceFetchResult<MySqlPitch>> {
-  const client = createMySqlApiClient(async () => session.access_token);
+  const client = createDirectoryApiClient(session);
 
   return fetchAllPages("pitches", (page) =>
     client.getPitches({
@@ -189,7 +199,7 @@ export async function fetchTimetrackPitches(session: SessionData): Promise<Sourc
 }
 
 export async function fetchTimetrackEmployees(session: SessionData): Promise<SourceFetchResult<MySqlEmployee>> {
-  const client = createMySqlApiClient(async () => session.access_token);
+  const client = createDirectoryApiClient(session);
 
   return fetchAllPages("employees", (page) =>
     client.getEmployees({
@@ -211,7 +221,7 @@ export async function fetchTimetrackBrandById(
   session: SessionData,
   sourceBrandId: string
 ): Promise<MySqlBrand | null> {
-  const client = createMySqlApiClient(async () => session.access_token);
+  const client = createDirectoryApiClient(session);
   const response = await client.getBrand(sourceBrandId);
   if (response.error) {
     const brands = await fetchTimetrackBrands(session);
@@ -224,7 +234,7 @@ export async function fetchTimetrackCampaignByUuid(
   session: SessionData,
   sourceProjectId: string
 ): Promise<MySqlCampaign | null> {
-  const client = createMySqlApiClient(async () => session.access_token);
+  const client = createDirectoryApiClient(session);
   const response = await client.getCampaign(sourceProjectId);
   return response.error ? null : response.data ?? null;
 }
@@ -233,7 +243,7 @@ export async function fetchTimetrackPitchByUuid(
   session: SessionData,
   sourceProjectId: string
 ): Promise<MySqlPitch | null> {
-  const client = createMySqlApiClient(async () => session.access_token);
+  const client = createDirectoryApiClient(session);
   const response = await client.getPitch(sourceProjectId);
   return response.error ? null : response.data ?? null;
 }
@@ -242,7 +252,7 @@ export async function fetchTimetrackEmployeeByUuid(
   session: SessionData,
   sourceEmployeeUuid: string
 ): Promise<MySqlEmployee | null> {
-  const client = createMySqlApiClient(async () => session.access_token);
+  const client = createDirectoryApiClient(session);
   const response = await client.getEmployee(sourceEmployeeUuid);
   return response.error ? null : response.data ?? null;
 }

@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fetchTimetrackDepartments } from "@/lib/planner-directory/timetrack-source";
+import {
+  fetchTimetrackCampaigns,
+  fetchTimetrackDepartments,
+} from "@/lib/planner-directory/timetrack-source";
 
 const mocks = vi.hoisted(() => ({
   getDepartments: vi.fn(),
+  getCampaigns: vi.fn(),
   createMySqlApiClient: vi.fn(),
+  pacers: [] as unknown[],
 }));
 
 vi.mock("@/lib/mysql/api-client", () => ({
@@ -13,9 +18,14 @@ vi.mock("@/lib/mysql/api-client", () => ({
 describe("planner directory timetrack source", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.createMySqlApiClient.mockReturnValue({
-      getDepartments: mocks.getDepartments,
-      });
+    mocks.pacers.splice(0);
+    mocks.createMySqlApiClient.mockImplementation((_getToken, options) => {
+      mocks.pacers.push(options?.requestPacer);
+      return {
+        getDepartments: mocks.getDepartments,
+        getCampaigns: mocks.getCampaigns,
+      };
+    });
   });
 
   it("reads nested Timetrack list payloads into page records", async () => {
@@ -74,5 +84,27 @@ describe("planner directory timetrack source", () => {
         access_token: "token",
       } as never)
     ).rejects.toThrow("TimeTrack departments fetch failed on page 1: Forbidden");
+  });
+
+  it("shares one request pacer across directory list clients", async () => {
+    mocks.getDepartments.mockResolvedValue({
+      status: 200,
+      data: [],
+      meta: { current_page: 1, last_page: 1 },
+    });
+    mocks.getCampaigns.mockResolvedValue({
+      status: 200,
+      data: [],
+      meta: { current_page: 1, last_page: 1 },
+    });
+
+    const session = { access_token: "token" } as never;
+
+    await fetchTimetrackDepartments(session);
+    await fetchTimetrackCampaigns(session);
+
+    expect(mocks.pacers).toHaveLength(2);
+    expect(mocks.pacers[0]).toBe(mocks.pacers[1]);
+    expect(mocks.pacers[0]).toBeDefined();
   });
 });
