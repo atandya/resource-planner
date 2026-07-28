@@ -63,6 +63,13 @@ class MySqlApiClient {
     return `${endpoint}-${JSON.stringify(params || {})}`;
   }
 
+  private routeLabel(endpoint: string): string {
+    const segments = endpoint.split('/').filter(Boolean);
+    return `/${segments.map((segment, index) => (
+      index === 0 || segment === 'deliverables' ? segment : ':id'
+    )).join('/')}`;
+  }
+
   /**
    * Classify error type for better handling
    */
@@ -139,7 +146,7 @@ class MySqlApiClient {
             control?.deferFor(retryAfterMs ?? retryDelay);
           }
 
-          throw new MySqlApiError(`API Error: ${response.statusText}`, response.status, retryAfterMs);
+          throw new MySqlApiError(`API request failed with status ${response.status}`, response.status, retryAfterMs);
         }
 
         return response;
@@ -176,7 +183,7 @@ class MySqlApiClient {
     // Check if identical request is pending (deduplication)
     if (this.pendingRequests.has(requestKey)) {
       if (this.shouldLog()) {
-        console.log(`[MySqlApiClient] Deduplicating request:`, { endpoint });
+        console.log(`[MySqlApiClient] Deduplicating request:`, { route: this.routeLabel(endpoint) });
       }
       return this.pendingRequests.get(requestKey) as Promise<MySqlApiResponse<T>>;
     }
@@ -200,8 +207,7 @@ class MySqlApiClient {
     endpoint: string,
     params?: MySqlQueryParams,
   ): Promise<MySqlApiResponse<T>> {
-    let lastError: unknown;
-    let lastErrorType: ErrorType = 'unknown';
+    const route = this.routeLabel(endpoint);
 
     // Get token from session
     const token = await this.getToken();
@@ -231,7 +237,7 @@ class MySqlApiClient {
 
         if (this.shouldLog()) {
           console.log(`[MySqlApiClient] Request (attempt ${attempt}/${this.MAX_RETRIES}):`, {
-            endpoint,
+            route,
             hasToken: !!token,
           });
         }
@@ -249,7 +255,7 @@ class MySqlApiClient {
 
           if (this.shouldLog()) {
             console.log('[MySqlApiClient] Response:', {
-              endpoint,
+              route,
               status: response.status,
               ok: response.ok,
             });
@@ -261,7 +267,7 @@ class MySqlApiClient {
 
           if (this.shouldLog()) {
             console.log('[MySqlApiClient] Raw response:', {
-              endpoint,
+              route,
               status: response.status,
               contentType,
               contentLength: responseText.length,
@@ -275,12 +281,12 @@ class MySqlApiClient {
           } catch {
             if (this.shouldLog()) {
               console.error('[MySqlApiClient] JSON parse failed:', {
-                endpoint,
+                route,
                 contentType,
               });
             }
             throw new MySqlApiError(
-              `Invalid JSON response from ${endpoint}`,
+              'Invalid JSON response',
               response.status
             );
           }
@@ -290,12 +296,9 @@ class MySqlApiClient {
         } catch (fetchError) {
           // Classify the error
           const errorType = this.classifyError(fetchError);
-          lastError = fetchError;
-          lastErrorType = errorType;
-
           if (this.shouldLog()) {
             console.error(`[MySqlApiClient] Attempt ${attempt} failed:`, {
-              endpoint,
+              route,
               errorType,
             });
           }
@@ -317,12 +320,9 @@ class MySqlApiClient {
       } catch (error) {
         // This is our final attempt or non-retryable error
         const errorType = this.classifyError(error);
-        lastError = error;
-        lastErrorType = errorType;
-
         if (this.shouldLog()) {
           console.error('[MySqlApiClient] Request failed after all retries:', {
-            endpoint,
+            route,
             errorType,
             attempt,
           });
@@ -330,15 +330,14 @@ class MySqlApiClient {
 
         // Return structured error response instead of crashing
         const enhancedError: EnhancedApiError = {
-          message: error instanceof Error ? error.message : 'Unknown error',
+          message: 'Request failed',
           type: errorType,
-          originalError: error,
         };
 
         return {
           status: 500,
           success: false,
-          message: `Request failed: ${enhancedError.message}`,
+          message: 'Request failed',
           error: enhancedError,
           data: [] as T,
         };
@@ -349,11 +348,10 @@ class MySqlApiClient {
     return {
       status: 500,
       success: false,
-      message: 'Request failed: Maximum retries exceeded',
+      message: 'Request failed',
       error: {
-        message: 'Maximum retries exceeded',
+        message: 'Request failed',
         type: 'unknown',
-        originalError: lastError,
       },
       data: [] as T,
     };
@@ -449,8 +447,7 @@ class MySqlApiClient {
     data?: unknown,
     params?: MySqlQueryParams,
   ): Promise<MySqlApiResponse<T>> {
-    let lastError: unknown;
-    let lastErrorType: ErrorType = 'unknown';
+    const route = this.routeLabel(endpoint);
 
     // Get token from session
     const token = await this.getToken();
@@ -480,7 +477,7 @@ class MySqlApiClient {
 
         if (this.shouldLog()) {
           console.log(`[MySqlApiClient] ${method} Request (attempt ${attempt}/${this.MAX_RETRIES}):`, {
-            endpoint,
+            route,
             hasToken: !!token,
             hasBody: !!data,
           });
@@ -508,7 +505,7 @@ class MySqlApiClient {
 
           if (this.shouldLog()) {
             console.log(`[MySqlApiClient] ${method} Response:`, {
-              endpoint,
+              route,
               status: response.status,
               ok: response.ok,
             });
@@ -520,7 +517,7 @@ class MySqlApiClient {
 
           if (this.shouldLog()) {
             console.log('[MySqlApiClient] Raw response:', {
-              endpoint,
+              route,
               status: response.status,
               contentType,
               contentLength: responseText.length,
@@ -534,12 +531,12 @@ class MySqlApiClient {
           } catch {
             if (this.shouldLog()) {
               console.error('[MySqlApiClient] JSON parse failed:', {
-                endpoint,
+                route,
                 contentType,
               });
             }
             throw new MySqlApiError(
-              `Invalid JSON response from ${endpoint}`,
+              'Invalid JSON response',
               response.status
             );
           }
@@ -549,12 +546,9 @@ class MySqlApiClient {
         } catch (fetchError) {
           // Classify the error
           const errorType = this.classifyError(fetchError);
-          lastError = fetchError;
-          lastErrorType = errorType;
-
           if (this.shouldLog()) {
             console.error(`[MySqlApiClient] Attempt ${attempt} failed:`, {
-              endpoint,
+              route,
               errorType,
             });
           }
@@ -576,12 +570,9 @@ class MySqlApiClient {
       } catch (error) {
         // This is our final attempt or non-retryable error
         const errorType = this.classifyError(error);
-        lastError = error;
-        lastErrorType = errorType;
-
         if (this.shouldLog()) {
           console.error('[MySqlApiClient] Request failed after all retries:', {
-            endpoint,
+            route,
             errorType,
             attempt,
           });
@@ -589,15 +580,14 @@ class MySqlApiClient {
 
         // Return structured error response instead of crashing
         const enhancedError: EnhancedApiError = {
-          message: error instanceof Error ? error.message : 'Unknown error',
+          message: 'Request failed',
           type: errorType,
-          originalError: error,
         };
 
         return {
           status: 500,
           success: false,
-          message: `Request failed: ${enhancedError.message}`,
+          message: 'Request failed',
           error: enhancedError,
           data: null as T,
         };
@@ -608,11 +598,10 @@ class MySqlApiClient {
     return {
       status: 500,
       success: false,
-      message: 'Request failed: Maximum retries exceeded',
+      message: 'Request failed',
       error: {
-        message: 'Maximum retries exceeded',
+        message: 'Request failed',
         type: 'unknown',
-        originalError: lastError,
       },
       data: null as T,
     };

@@ -8,7 +8,6 @@ export type ErrorType = 'network' | 'timeout' | 'auth' | 'parse' | 'unknown';
 export interface EnhancedApiError {
   message: string;
   type: ErrorType;
-  originalError?: unknown;
 }
 
 // ============ API RESPONSE WRAPPER ============

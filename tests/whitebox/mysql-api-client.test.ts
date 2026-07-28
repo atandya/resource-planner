@@ -33,18 +33,15 @@ function expectSentinelsToBeAbsent(
   logCalls: unknown[][],
   sentinels: string[],
 ) {
-  const originalError = result.error?.originalError;
-  expect(originalError).toBeInstanceOf(Error);
   const serializedResult = JSON.stringify(result);
   const serializedLogs = JSON.stringify(logCalls);
 
+  expect(result.error).not.toHaveProperty("originalError");
   for (const sentinel of sentinels) {
     expect(serializedResult).not.toContain(sentinel);
     expect(serializedLogs).not.toContain(sentinel);
     expect(result.message).not.toContain(sentinel);
     expect(result.error?.message).not.toContain(sentinel);
-    expect((originalError as Error).message).not.toContain(sentinel);
-    expect((originalError as Error).stack).not.toContain(sentinel);
   }
 }
 
@@ -306,6 +303,49 @@ describe("MySqlApiClient", () => {
       result,
       [...log.mock.calls, ...error.mock.calls],
       [token, requestText, responseText],
+    );
+  });
+
+  it("does not expose GET status text or dynamic resource IDs", async () => {
+    const token = "GET-STATUS-TOKEN-SENTINEL";
+    const resourceId = "GET-DYNAMIC-ID-SENTINEL";
+    const statusText = "GET-STATUS-TEXT-SENTINEL";
+    vi.stubEnv("NODE_ENV", "development");
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(null, { status: 401, statusText }))
+    );
+    const client = createMySqlApiClient(async () => token);
+
+    const result = await client.getBrand(resourceId);
+
+    expectSentinelsToBeAbsent(
+      result,
+      [...log.mock.calls, ...error.mock.calls],
+      [token, resourceId, statusText],
+    );
+  });
+
+  it("does not expose body fetch failures or dynamic resource IDs", async () => {
+    const token = "BODY-REJECT-TOKEN-SENTINEL";
+    const resourceId = "BODY-DYNAMIC-ID-SENTINEL";
+    const rejectedMessage = "fetch BODY-REJECTED-SENTINEL";
+    vi.stubEnv("NODE_ENV", "development");
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError(rejectedMessage)));
+    const client = createMySqlApiClient(async () => token, {
+      delay: async () => undefined,
+    });
+
+    const result = await client.updateAssignment(resourceId, { note: "safe-note" });
+
+    expectSentinelsToBeAbsent(
+      result,
+      [...log.mock.calls, ...error.mock.calls],
+      [token, resourceId, rejectedMessage],
     );
   });
 });
