@@ -48,6 +48,54 @@ describe("TimeTrack request pacer", () => {
     expect(starts).toEqual([0, 5_000]);
   });
 
+  it("does not shorten a deferred cooldown when a smaller deferral follows", async () => {
+    let currentTime = 0;
+    const starts: number[] = [];
+    const pacer = createTimeTrackRequestPacer({
+      now: () => currentTime,
+      sleep: async (ms) => {
+        currentTime += ms;
+      },
+    });
+
+    await Promise.all([
+      pacer.execute(async (control) => {
+        starts.push(currentTime);
+        control.deferFor(5_000);
+        control.deferFor(1_000);
+      }),
+      pacer.execute(async () => {
+        starts.push(currentTime);
+      }),
+    ]);
+
+    expect(starts).toEqual([0, 5_000]);
+  });
+
+  it("treats a negative deferred cooldown as zero", async () => {
+    let currentTime = 0;
+    const starts: number[] = [];
+    const pacer = createTimeTrackRequestPacer({
+      minimumIntervalMs: 0,
+      now: () => currentTime,
+      sleep: async (ms) => {
+        currentTime += ms;
+      },
+    });
+
+    await Promise.all([
+      pacer.execute(async (control) => {
+        starts.push(currentTime);
+        control.deferFor(-1_000);
+      }),
+      pacer.execute(async () => {
+        starts.push(currentTime);
+      }),
+    ]);
+
+    expect(starts).toEqual([0, 0]);
+  });
+
   it("releases the queue after a rejected operation", async () => {
     const pacer = createTimeTrackRequestPacer({
       sleep: async () => undefined,
