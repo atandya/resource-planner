@@ -19,6 +19,14 @@ import type {
   EnhancedApiError,
 } from '../types/mysql';
 import { MySqlApiError } from '../types/mysql';
+import type { TimeTrackRequestPacer } from '../planner-directory/timetrack-request-pacer';
+
+export type MySqlApiClientOptions = {
+  requestPacer?: TimeTrackRequestPacer;
+  delay?: (ms: number) => Promise<void>;
+  now?: () => number;
+  random?: () => number;
+};
 
 class MySqlApiClient {
   private baseUrl: string;
@@ -27,10 +35,18 @@ class MySqlApiClient {
   private readonly RETRY_DELAYS = [500, 1500, 4000]; // Exponential backoff in ms
   private pendingRequests = new Map<string, Promise<any>>();
   private getToken: () => Promise<string>; // Function to get token from session
+  private readonly requestPacer?: TimeTrackRequestPacer;
+  private readonly delayFn: (ms: number) => Promise<void>;
+  private readonly now: () => number;
+  private readonly random: () => number;
 
-  constructor(getTokenFn: () => Promise<string>) {
+  constructor(getTokenFn: () => Promise<string>, options?: MySqlApiClientOptions) {
     this.baseUrl = process.env.TIMETRACK_API_URL || 'http://127.0.0.1:8000/api/v1';
     this.getToken = getTokenFn;
+    this.requestPacer = options?.requestPacer;
+    this.delayFn = options?.delay ?? ((ms) => new Promise(resolve => setTimeout(resolve, ms)));
+    this.now = options?.now ?? Date.now;
+    this.random = options?.random ?? Math.random;
   }
 
   /**
@@ -79,25 +95,65 @@ class MySqlApiClient {
    * Wait for specified delay (for retry backoff)
    */
   private delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+    return this.delayFn(ms);
+  }
+
+  private parseRetryAfter(retryAfter: string | null): number | undefined {
+    if (!retryAfter) return undefined;
+
+    const value = retryAfter.trim();
+    if (/^\d+$/.test(value)) {
+      const milliseconds = Number(value) * 1_000;
+      return Number.isSafeInteger(milliseconds) ? milliseconds : undefined;
+    }
+
+    const parsedDate = Date.parse(value);
+    if (Number.isNaN(parsedDate) || parsedDate < this.now()) return undefined;
+    return Math.max(0, parsedDate - this.now());
+  }
+
+  private jitteredRetryDelay(attempt: number): number {
+    const retryDelay = this.RETRY_DELAYS[attempt - 1];
+    return Math.round(retryDelay * (0.8 + (this.random() * 0.4)));
+  }
+
+  private async rawFetch(
+    url: string,
+    options: RequestInit,
+    retryDelay: number,
+  ): Promise<Response> {
+    const operation = async (control?: { deferFor(ms: number): void }): Promise<Response> => {
+      const response = await fetch(url, options);
+
+      if (!response.ok) {
+        const retryAfterMs = response.status === 429
+          ? this.parseRetryAfter(response.headers.get('retry-after'))
+          : undefined;
+
+        if (response.status === 429) {
+          control?.deferFor(retryAfterMs ?? retryDelay);
+        }
+
+        throw new MySqlApiError(`API Error: ${response.statusText}`, response.status, retryAfterMs);
+      }
+
+      return response;
+    };
+
+    return this.requestPacer
+      ? this.requestPacer.execute(operation)
+      : operation();
   }
 
   /**
    * Check if error is retryable
    */
   private isRetryableError(error: unknown, errorType: ErrorType): boolean {
-    // Retry on network errors, timeouts, and 5xx server errors
+    if (error instanceof MySqlApiError && error.statusCode === 429) return true;
     if (errorType === 'network' || errorType === 'timeout') {
       return true;
     }
-    if (error instanceof MySqlApiError && error.statusCode >= 500) {
-      return true;
-    }
-    // Don't retry on 4xx client errors (except 429 too many requests)
-    if (error instanceof MySqlApiError && error.statusCode >= 400 && error.statusCode < 500 && error.statusCode !== 429) {
-      return false;
-    }
-    return false;
+    return error instanceof MySqlApiError && error.statusCode >= 500;
   }
 
   /**
@@ -163,6 +219,7 @@ class MySqlApiClient {
     for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
       try {
         const url = buildUrl();
+        const rateLimitRetryDelay = this.jitteredRetryDelay(attempt);
 
         if (this.shouldLog()) {
           console.log(`[MySqlApiClient] Request (attempt ${attempt}/${this.MAX_RETRIES}):`, {
@@ -179,7 +236,7 @@ class MySqlApiClient {
 
         try {
           // Make request with Bearer token and timeout signal
-          const response = await fetch(url.toString(), {
+          const response = await this.rawFetch(url.toString(), {
             headers: {
               'Authorization': `Bearer ${token}`,
               'Content-Type': 'application/json',
@@ -187,7 +244,7 @@ class MySqlApiClient {
             },
             signal: controller.signal,
             cache: 'no-store',
-          });
+          }, rateLimitRetryDelay);
 
           // Clear timeout on successful response
           clearTimeout(timeoutId);
@@ -199,11 +256,6 @@ class MySqlApiClient {
               statusText: response.statusText,
               ok: response.ok,
             });
-          }
-
-          if (!response.ok) {
-            // Handle 401 - token expired, let caller handle redirect to login
-            throw new MySqlApiError(`API Error: ${response.statusText}`, response.status);
           }
 
           // Get raw response as text first for better error logging
@@ -264,11 +316,15 @@ class MySqlApiClient {
 
           // Check if we should retry
           if (attempt < this.MAX_RETRIES && this.isRetryableError(fetchError, errorType)) {
-            const retryDelay = this.RETRY_DELAYS[attempt - 1];
+            const retryDelay = fetchError instanceof MySqlApiError && fetchError.statusCode === 429
+              ? fetchError.retryAfterMs ?? rateLimitRetryDelay
+              : this.RETRY_DELAYS[attempt - 1];
             if (this.shouldLog()) {
               console.log(`[MySqlApiClient] Retrying in ${retryDelay}ms...`);
             }
-            await this.delay(retryDelay);
+            if (!(fetchError instanceof MySqlApiError && fetchError.statusCode === 429 && this.requestPacer)) {
+              await this.delay(retryDelay);
+            }
             continue;
           }
 
@@ -447,6 +503,7 @@ class MySqlApiClient {
     for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
       try {
         const url = buildUrl();
+        const rateLimitRetryDelay = this.jitteredRetryDelay(attempt);
 
         if (this.shouldLog()) {
           console.log(`[MySqlApiClient] ${method} Request (attempt ${attempt}/${this.MAX_RETRIES}):`, {
@@ -481,7 +538,7 @@ class MySqlApiClient {
           }
 
           // Make request
-          const response = await fetch(url.toString(), options);
+          const response = await this.rawFetch(url.toString(), options, rateLimitRetryDelay);
 
           // Clear timeout on successful response
           clearTimeout(timeoutId);
@@ -493,11 +550,6 @@ class MySqlApiClient {
               statusText: response.statusText,
               ok: response.ok,
             });
-          }
-
-          if (!response.ok) {
-            // Handle 401 - token expired, let caller handle redirect to login
-            throw new MySqlApiError(`API Error: ${response.statusText}`, response.status);
           }
 
           // Get raw response as text first for better error logging
@@ -558,11 +610,15 @@ class MySqlApiClient {
 
           // Check if we should retry
           if (attempt < this.MAX_RETRIES && this.isRetryableError(fetchError, errorType)) {
-            const retryDelay = this.RETRY_DELAYS[attempt - 1];
+            const retryDelay = fetchError instanceof MySqlApiError && fetchError.statusCode === 429
+              ? fetchError.retryAfterMs ?? rateLimitRetryDelay
+              : this.RETRY_DELAYS[attempt - 1];
             if (this.shouldLog()) {
               console.log(`[MySqlApiClient] Retrying in ${retryDelay}ms...`);
             }
-            await this.delay(retryDelay);
+            if (!(fetchError instanceof MySqlApiError && fetchError.statusCode === 429 && this.requestPacer)) {
+              await this.delay(retryDelay);
+            }
             continue;
           }
 
@@ -698,8 +754,11 @@ export function getMySqlApiClient(tokenFn?: () => Promise<string>): MySqlApiClie
  * Create a new MySqlApiClient instance with a token function
  * Use this for creating scoped clients
  */
-export function createMySqlApiClient(tokenFn: () => Promise<string>): MySqlApiClient {
-  return new MySqlApiClient(tokenFn);
+export function createMySqlApiClient(
+  tokenFn: () => Promise<string>,
+  options?: MySqlApiClientOptions,
+): MySqlApiClient {
+  return new MySqlApiClient(tokenFn, options);
 }
 
 // Re-export error type for convenience

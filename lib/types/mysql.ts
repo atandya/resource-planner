@@ -289,6 +289,7 @@ export class MySqlApiError extends Error {
   constructor(
     message: string,
     public statusCode: number,
+    public retryAfterMs?: number,
   ) {
     super(message);
     this.name = 'MySqlApiError';
