@@ -28,9 +28,31 @@ function stubRateLimitedThenSuccessfulFetch(retryAfter?: string) {
   );
 }
 
+function expectSentinelsToBeAbsent(
+  result: { message: string; error?: { message: string; originalError?: unknown } },
+  logCalls: unknown[][],
+  sentinels: string[],
+) {
+  const originalError = result.error?.originalError;
+  expect(originalError).toBeInstanceOf(Error);
+  const serializedResult = JSON.stringify(result);
+  const serializedLogs = JSON.stringify(logCalls);
+
+  for (const sentinel of sentinels) {
+    expect(serializedResult).not.toContain(sentinel);
+    expect(serializedLogs).not.toContain(sentinel);
+    expect(result.message).not.toContain(sentinel);
+    expect(result.error?.message).not.toContain(sentinel);
+    expect((originalError as Error).message).not.toContain(sentinel);
+    expect((originalError as Error).stack).not.toContain(sentinel);
+  }
+}
+
 describe("MySqlApiClient", () => {
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
+    vi.unstubAllEnvs();
     vi.unstubAllGlobals();
   });
 
@@ -230,5 +252,60 @@ describe("MySqlApiClient", () => {
     expect(deferFor).toHaveBeenCalledWith(2_000);
     expect(delay).not.toHaveBeenCalled();
     expect(result).toEqual(successfulResponse);
+  });
+
+  it("does not expose GET tokens, query values, or malformed response text", async () => {
+    const token = "GET-TOKEN-SENTINEL";
+    const query = "GET-REQUEST-SENTINEL";
+    const responseText = "GET-RESPONSE-SENTINEL";
+    vi.stubEnv("NODE_ENV", "development");
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(responseText, {
+        headers: { "Content-Type": "application/json" },
+      }))
+    );
+    const client = createMySqlApiClient(async () => token);
+
+    const result = await client.getBrands({ search: query });
+
+    expectSentinelsToBeAbsent(
+      result,
+      [...log.mock.calls, ...error.mock.calls],
+      [token, query, responseText],
+    );
+  });
+
+  it("does not expose body tokens, payloads, or malformed response text", async () => {
+    const token = "BODY-TOKEN-SENTINEL";
+    const requestText = "BODY-REQUEST-SENTINEL";
+    const responseText = "BODY-RESPONSE-SENTINEL";
+    vi.stubEnv("NODE_ENV", "development");
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response(responseText, {
+        headers: { "Content-Type": "application/json" },
+      }))
+    );
+    const client = createMySqlApiClient(async () => token);
+
+    const result = await client.createAssignment({
+      employee_uuid: "employee-uuid",
+      project_uuid: "project-uuid",
+      start_date: "2026-07-28",
+      end_date: "2026-07-28",
+      hours_per_day: "8",
+      note: requestText,
+    });
+
+    expectSentinelsToBeAbsent(
+      result,
+      [...log.mock.calls, ...error.mock.calls],
+      [token, requestText, responseText],
+    );
   });
 });

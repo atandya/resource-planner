@@ -176,7 +176,7 @@ class MySqlApiClient {
     // Check if identical request is pending (deduplication)
     if (this.pendingRequests.has(requestKey)) {
       if (this.shouldLog()) {
-        console.log(`[MySqlApiClient] Deduplicating request:`, { endpoint, params });
+        console.log(`[MySqlApiClient] Deduplicating request:`, { endpoint });
       }
       return this.pendingRequests.get(requestKey) as Promise<MySqlApiResponse<T>>;
     }
@@ -232,9 +232,7 @@ class MySqlApiClient {
         if (this.shouldLog()) {
           console.log(`[MySqlApiClient] Request (attempt ${attempt}/${this.MAX_RETRIES}):`, {
             endpoint,
-            fullUrl: url.toString(),
             hasToken: !!token,
-            tokenPreview: token ? `${token.substring(0, 10)}...` : 'none',
           });
         }
 
@@ -253,7 +251,6 @@ class MySqlApiClient {
             console.log('[MySqlApiClient] Response:', {
               endpoint,
               status: response.status,
-              statusText: response.statusText,
               ok: response.ok,
             });
           }
@@ -268,7 +265,6 @@ class MySqlApiClient {
               status: response.status,
               contentType,
               contentLength: responseText.length,
-              responsePreview: responseText.substring(0, 500),
             });
           }
 
@@ -276,23 +272,17 @@ class MySqlApiClient {
           let data;
           try {
             data = JSON.parse(responseText);
-          } catch (parseError) {
+          } catch {
             if (this.shouldLog()) {
               console.error('[MySqlApiClient] JSON parse failed:', {
                 endpoint,
-                parseError: parseError instanceof Error ? parseError.message : parseError,
                 contentType,
-                responsePreview: responseText.substring(0, 500),
               });
             }
             throw new MySqlApiError(
-              `Invalid JSON response from ${endpoint}: ${responseText.substring(0, 100)}`,
+              `Invalid JSON response from ${endpoint}`,
               response.status
             );
-          }
-
-          if (this.shouldLog()) {
-            console.log('[MySqlApiClient] Response data preview:', JSON.stringify(data).substring(0, 500));
           }
 
           // Success! Return the data
@@ -307,7 +297,6 @@ class MySqlApiClient {
             console.error(`[MySqlApiClient] Attempt ${attempt} failed:`, {
               endpoint,
               errorType,
-              error: fetchError instanceof Error ? fetchError.message : fetchError,
             });
           }
 
@@ -316,9 +305,6 @@ class MySqlApiClient {
             const retryDelay = fetchError instanceof MySqlApiError && fetchError.statusCode === 429
               ? fetchError.retryAfterMs ?? rateLimitRetryDelay
               : this.RETRY_DELAYS[attempt - 1];
-            if (this.shouldLog()) {
-              console.log(`[MySqlApiClient] Retrying in ${retryDelay}ms...`);
-            }
             if (!(fetchError instanceof MySqlApiError && fetchError.statusCode === 429 && this.requestPacer)) {
               await this.delay(retryDelay);
             }
@@ -337,11 +323,8 @@ class MySqlApiClient {
         if (this.shouldLog()) {
           console.error('[MySqlApiClient] Request failed after all retries:', {
             endpoint,
-            baseUrl: this.baseUrl,
             errorType,
             attempt,
-            error: error instanceof Error ? error.message : error,
-            stack: error instanceof Error ? error.stack : undefined,
           });
         }
 
@@ -394,14 +377,7 @@ class MySqlApiClient {
    * Get pitches with pagination
    */
   async getPitches(params?: MySqlQueryParams): Promise<MySqlApiResponse<any>> {
-    if (this.shouldLog()) {
-      console.log('[MySqlApiClient] getPitches called with params:', params);
-    }
-    const result = await this.request<any>('/pitches', params);
-    if (this.shouldLog()) {
-      console.log('[MySqlApiClient] getPitches result:', JSON.stringify(result, null, 2));
-    }
-    return result;
+    return this.request<any>('/pitches', params);
   }
 
   /**
@@ -505,10 +481,8 @@ class MySqlApiClient {
         if (this.shouldLog()) {
           console.log(`[MySqlApiClient] ${method} Request (attempt ${attempt}/${this.MAX_RETRIES}):`, {
             endpoint,
-            fullUrl: url.toString(),
             hasToken: !!token,
             hasBody: !!data,
-            bodyPreview: data ? JSON.stringify(data).substring(0, 200) : 'none',
           });
         }
 
@@ -536,7 +510,6 @@ class MySqlApiClient {
             console.log(`[MySqlApiClient] ${method} Response:`, {
               endpoint,
               status: response.status,
-              statusText: response.statusText,
               ok: response.ok,
             });
           }
@@ -551,7 +524,6 @@ class MySqlApiClient {
               status: response.status,
               contentType,
               contentLength: responseText.length,
-              responsePreview: responseText.substring(0, 500),
             });
           }
 
@@ -559,23 +531,17 @@ class MySqlApiClient {
           let responseData;
           try {
             responseData = JSON.parse(responseText);
-          } catch (parseError) {
+          } catch {
             if (this.shouldLog()) {
               console.error('[MySqlApiClient] JSON parse failed:', {
                 endpoint,
-                parseError: parseError instanceof Error ? parseError.message : parseError,
                 contentType,
-                responsePreview: responseText.substring(0, 500),
               });
             }
             throw new MySqlApiError(
-              `Invalid JSON response from ${endpoint}: ${responseText.substring(0, 100)}`,
+              `Invalid JSON response from ${endpoint}`,
               response.status
             );
-          }
-
-          if (this.shouldLog()) {
-            console.log('[MySqlApiClient] Response data preview:', JSON.stringify(responseData).substring(0, 500));
           }
 
           // Success! Return the data
@@ -590,7 +556,6 @@ class MySqlApiClient {
             console.error(`[MySqlApiClient] Attempt ${attempt} failed:`, {
               endpoint,
               errorType,
-              error: fetchError instanceof Error ? fetchError.message : fetchError,
             });
           }
 
@@ -599,9 +564,6 @@ class MySqlApiClient {
             const retryDelay = fetchError instanceof MySqlApiError && fetchError.statusCode === 429
               ? fetchError.retryAfterMs ?? rateLimitRetryDelay
               : this.RETRY_DELAYS[attempt - 1];
-            if (this.shouldLog()) {
-              console.log(`[MySqlApiClient] Retrying in ${retryDelay}ms...`);
-            }
             if (!(fetchError instanceof MySqlApiError && fetchError.statusCode === 429 && this.requestPacer)) {
               await this.delay(retryDelay);
             }
@@ -620,11 +582,8 @@ class MySqlApiClient {
         if (this.shouldLog()) {
           console.error('[MySqlApiClient] Request failed after all retries:', {
             endpoint,
-            baseUrl: this.baseUrl,
             errorType,
             attempt,
-            error: error instanceof Error ? error.message : error,
-            stack: error instanceof Error ? error.stack : undefined,
           });
         }
 
