@@ -44,6 +44,7 @@ export const queryKeys = {
   // Assignments
   assignments: ["assignments"] as const,
   assignmentsByProject: (projectId: string) => ["assignments", "project", projectId] as const,
+  assignmentsByEmployee: (employeeId: string) => ["assignments", "employee", employeeId] as const,
 
   // Planner timeline
   plannerHomeBootstrap: ["planner-home-bootstrap"] as const,

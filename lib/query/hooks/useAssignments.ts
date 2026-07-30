@@ -82,6 +82,15 @@ async function fetchAssignmentsByProject(projectKey: string): Promise<Assignment
   return stitchAssignments(data.engagements ?? [], data.allocations ?? []);
 }
 
+async function fetchAssignmentsByEmployee(employeeId: string): Promise<Assignment[]> {
+  const response = await fetch(`/api/assignments?employeeId=${encodeURIComponent(employeeId)}`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch assignments by employee");
+  }
+  const data = await response.json();
+  return stitchAssignments(data.engagements ?? [], data.allocations ?? []);
+}
+
 async function deleteAssignment(id: string): Promise<void> {
   const response = await fetch(`/api/assignments/${id}`, {
     method: "DELETE",
@@ -106,6 +115,14 @@ export function useAssignmentsByProject(projectKey: string, options: { enabled?:
     queryKey: queryKeys.assignmentsByProject(projectKey),
     queryFn: () => fetchAssignmentsByProject(projectKey),
     enabled: !!projectKey && (options.enabled ?? true),
+  });
+}
+
+export function useAssignmentsByEmployee(employeeId: string | null, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.assignmentsByEmployee(employeeId ?? ""),
+    queryFn: () => fetchAssignmentsByEmployee(employeeId as string),
+    enabled: !!employeeId && (options.enabled ?? true),
   });
 }
 
