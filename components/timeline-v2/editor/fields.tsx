@@ -84,10 +84,12 @@ export function NoteField({ value, onChange }: { value: string; onChange: (value
 // The only confirmation step that survives the editor consolidation:
 // destructive deletes.
 export function DeleteWithConfirm({
+  title,
   description,
   disabled,
   onConfirm,
 }: {
+  title?: string;
   description: string;
   disabled?: boolean;
   onConfirm: () => void;
@@ -102,7 +104,7 @@ export function DeleteWithConfirm({
       <AlertDialog open={open} onOpenChange={setOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete assignment</AlertDialogTitle>
+            <AlertDialogTitle>{title ?? "Delete assignment"}</AlertDialogTitle>
             <AlertDialogDescription>{description}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -20,7 +20,7 @@ function unionSpan(monthStart: Date, existing?: Assignment) {
 export function useTimelineEditor(_opts: { canEditAssignments: boolean; createdByUuid: string | null }) {
   const target = useAssignmentEditorStore((s) => s.target);
   const close = useAssignmentEditorStore((s) => s.close);
-  const { upsert, remove } = useAssignmentCommands();
+  const { upsert, remove, removeMonth } = useAssignmentCommands();
 
   const saveMonth = async (data: MonthSaveData) => {
     if (target?.mode !== "month") return;
@@ -35,7 +35,11 @@ export function useTimelineEditor(_opts: { canEditAssignments: boolean; createdB
   };
 
   const deleteMonth = async () => {
-    if (target?.mode === "month" && target.clickedAssignment) { await remove.mutateAsync(target.clickedAssignment.id); close(); }
+    if (target?.mode === "month" && target.clickedAssignment) {
+      const monthKey = format(startOfMonth(target.monthStart), "yyyy-MM-01");
+      await removeMonth.mutateAsync({ id: target.clickedAssignment.id, month: monthKey, kind: "plan" });
+      close();
+    }
   };
 
   const deleteSingle = async () => {

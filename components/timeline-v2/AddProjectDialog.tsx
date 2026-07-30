@@ -11,6 +11,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -18,6 +28,7 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { usePlannerFilterProjects } from "@/lib/query/hooks";
 import { hasProjectCriteria } from "@/lib/query/filterCriteria";
 import { useAssignmentCommands } from "@/lib/query/hooks/useAssignmentCommands";
+import { useAssignmentsByEmployee } from "@/lib/query/hooks/useAssignments";
 import { toast } from "@/hooks/use-toast";
 import { useAddProjectStore } from "@/lib/timeline-v2/add-project-store";
 import {
@@ -29,6 +40,7 @@ import {
   toDateInputValue,
   toWholeHoursInput,
 } from "@/lib/assignments/split";
+import { getOverCapacityMonths, sumExistingMonthlyHours } from "@/lib/assignments/capacity-warning";
 import type { ProjectOption } from "@/lib/query/hooks/useProjects";
 
 type AddProjectDialogProps = {
@@ -59,8 +71,12 @@ export function AddProjectDialog({ createdByUuid: _createdByUuid }: AddProjectDi
   const [hoursInput, setHoursInput] = useState("");
   const [isCustomizing, setIsCustomizing] = useState(false);
   const [customMonthly, setCustomMonthly] = useState<Record<string, string>>({});
+  const [capacityConfirmOpen, setCapacityConfirmOpen] = useState(false);
 
   const projectQuery = usePlannerFilterProjects({ search: debouncedProjectSearch });
+  const employeeAssignmentsQuery = useAssignmentsByEmployee(target?.resourceId ?? null, {
+    enabled: !!target,
+  });
 
   const projects = useMemo(
     () => projectQuery.data?.pages.flatMap((page) => page.projects) ?? [],
@@ -97,6 +113,7 @@ export function AddProjectDialog({ createdByUuid: _createdByUuid }: AddProjectDi
     setHoursInput("");
     setIsCustomizing(false);
     setCustomMonthly({});
+    setCapacityConfirmOpen(false);
   };
 
   const evenMonthlyStrings = (total: number, from: string, to: string): Record<string, string> =>
@@ -144,23 +161,37 @@ export function AddProjectDialog({ createdByUuid: _createdByUuid }: AddProjectDi
     [spanMonths, customMonthly],
   );
 
+  const proposedMonthlyHours = useMemo(() => {
+    if (!rangeValid) return {};
+    return isCustomizing
+      ? Object.fromEntries(spanMonths.map((m) => [m, parseManHoursInput(customMonthly[m]) ?? 0]))
+      : splitTotalAcrossMonthsMap(totalHours ?? 0, startDate, endDate);
+  }, [rangeValid, isCustomizing, spanMonths, customMonthly, totalHours, startDate, endDate]);
+
+  const existingMonthlyHours = useMemo(() => {
+    if (!selectedProject || !employeeAssignmentsQuery.data) return {};
+    return sumExistingMonthlyHours(employeeAssignmentsQuery.data, selectedProject.projectKey);
+  }, [selectedProject, employeeAssignmentsQuery.data]);
+
+  const overCapacityMonths = useMemo(
+    () => getOverCapacityMonths({ existingByMonth: existingMonthlyHours, proposedByMonth: proposedMonthlyHours }),
+    [existingMonthlyHours, proposedMonthlyHours],
+  );
+
   const canSave =
     rangeValid &&
     !upsert.isPending &&
     (isCustomizing ? customMonthlyTotal > 0 : totalHours !== null && totalHours > 0);
 
-  const handleAssign = async () => {
+  const performAssign = async () => {
     if (!target || !selectedProject || !canSave) return;
     const assignedId = selectedProject.id;
-    const monthlyHours = isCustomizing
-      ? Object.fromEntries(spanMonths.map((m) => [m, parseManHoursInput(customMonthly[m]) ?? 0]))
-      : splitTotalAcrossMonthsMap(totalHours ?? 0, startDate, endDate);
     try {
       await upsert.mutateAsync({
         employeeUuid: target.resourceId,
         projectKey: selectedProject.projectKey,
         span: { startDate, endDate },
-        monthlyHours,
+        monthlyHours: proposedMonthlyHours,
         status: "draft",
         mode: "merge",
       });
@@ -173,6 +204,20 @@ export function AddProjectDialog({ createdByUuid: _createdByUuid }: AddProjectDi
         description: "Refresh and try again.",
       });
     }
+  };
+
+  const handleAssign = () => {
+    if (!canSave) return;
+    if (overCapacityMonths.length > 0) {
+      setCapacityConfirmOpen(true);
+      return;
+    }
+    void performAssign();
+  };
+
+  const handleConfirmOverCapacity = () => {
+    setCapacityConfirmOpen(false);
+    void performAssign();
   };
 
   if (!target) return null;
@@ -452,6 +497,13 @@ export function AddProjectDialog({ createdByUuid: _createdByUuid }: AddProjectDi
                       </span>
                     </div>
                   )}
+                  {overCapacityMonths.length > 0 ? (
+                    <p className="mt-2 text-xs text-red-500" data-testid="add-project-capacity-warning-text">
+                      {overCapacityMonths
+                        .map((m) => `${m.monthLabel} would reach ${m.totalHours}h of 160h`)
+                        .join("; ")}
+                    </p>
+                  ) : null}
                 </div>
               </div>
 
@@ -472,6 +524,39 @@ export function AddProjectDialog({ createdByUuid: _createdByUuid }: AddProjectDi
           ) : null}
         </DialogContent>
       </Dialog>
+
+      {/* Over-capacity confirmation; stacks on top of the still-open assign form */}
+      <AlertDialog open={capacityConfirmOpen} onOpenChange={setCapacityConfirmOpen}>
+        <AlertDialogContent data-testid="add-project-capacity-warning">
+          <AlertDialogHeader>
+            <div className="flex items-center gap-2">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-red-100">
+                <Icon icon="lucide:alert-triangle" className="h-5 w-5 text-red-600" />
+              </span>
+              <AlertDialogTitle>Over monthly capacity</AlertDialogTitle>
+            </div>
+            <AlertDialogDescription asChild>
+              <div className="mt-3 space-y-1.5">
+                {overCapacityMonths.map((m) => (
+                  <div key={m.month} className="text-sm font-medium text-foreground">
+                    {m.monthLabel} — {m.totalHours}h of 160h ({m.existingHours}h already planned + {m.proposedHours}h)
+                  </div>
+                ))}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Go back</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmOverCapacity}
+              className="bg-black text-sm text-white hover:bg-black/90"
+              data-testid="add-project-capacity-confirm"
+            >
+              Assign anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
