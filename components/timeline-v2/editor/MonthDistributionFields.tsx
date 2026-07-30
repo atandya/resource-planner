@@ -86,7 +86,8 @@ export function MonthDistributionFields({
         </Button>
         {isEditMode ? (
           <DeleteWithConfirm
-            description={`This deletes the ${target.project.name} engagement for this person (all of its months). This cannot be undone.`}
+            title="Delete month allocation"
+            description={`This removes the ${target.project.name} hours for ${format(target.monthStart, "MMMM yyyy")} only. Other months are unaffected. This cannot be undone.`}
             disabled={isSaving}
             onConfirm={onDelete}
           />

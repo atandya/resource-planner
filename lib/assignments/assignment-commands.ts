@@ -84,3 +84,56 @@ export async function removeAssignment(employeeUuid: string, projectKey: string)
   await assignmentsDb.execute(
     `DELETE FROM planner_assignments WHERE employee_uuid=$1 AND project_key=$2`, [employeeUuid, projectKey]);
 }
+
+const MONTH_RE = /^\d{4}-\d{2}-01$/;
+
+/**
+ * Deletes a single month's allocation row. If it was the engagement's last
+ * allocation (any kind), the engagement header is deleted too so it doesn't
+ * linger as an empty ghost row. Otherwise the engagement span is shrunk to
+ * the remaining allocation months.
+ */
+export async function removeAllocationMonth(
+  assignmentUuid: string,
+  month: string,
+  kind: "plan" | "adjustment" = "plan"
+): Promise<{ engagementDeleted: boolean }> {
+  if (!MONTH_RE.test(month)) throw new Error("month must be yyyy-MM-01");
+
+  const client = await assignmentsDb.getConnection();
+  const pgClient = client as { query(sql: string, params?: any[]): Promise<{ rows: any[] }>; release(): Promise<void> };
+  try {
+    await pgClient.query("BEGIN");
+    await pgClient.query(
+      `DELETE FROM planner_assignment_allocations WHERE assignment_uuid=$1 AND month=$2 AND kind=$3`,
+      [assignmentUuid, month, kind]
+    );
+    const remaining = await pgClient.query(
+      `SELECT to_char(min(month),'YYYY-MM-DD') AS min_m, to_char(max(month),'YYYY-MM-DD') AS max_m
+       FROM planner_assignment_allocations WHERE assignment_uuid=$1`,
+      [assignmentUuid]
+    );
+    const { min_m, max_m } = remaining.rows[0] ?? {};
+    let engagementDeleted = false;
+    if (!min_m) {
+      await pgClient.query(`DELETE FROM planner_assignments WHERE assignment_uuid=$1`, [assignmentUuid]);
+      engagementDeleted = true;
+    } else {
+      await pgClient.query(
+        `UPDATE planner_assignments
+           SET start_date = GREATEST(start_date, $2::date),
+               end_date = LEAST(end_date, ($3::date + interval '1 month' - interval '1 day')::date),
+               updated_at = now()
+         WHERE assignment_uuid=$1`,
+        [assignmentUuid, min_m, max_m]
+      );
+    }
+    await pgClient.query("COMMIT");
+    return { engagementDeleted };
+  } catch (e) {
+    await pgClient.query("ROLLBACK");
+    throw e;
+  } finally {
+    await pgClient.release();
+  }
+}

@@ -28,6 +28,14 @@ async function deleteAssignment(id: string) {
   if (!res.ok) throw new Error("Failed to delete assignment");
 }
 
+export type DeleteMonthBody = { id: string; month: string; kind?: "plan" | "adjustment" };
+
+async function deleteAssignmentMonth({ id, month, kind }: DeleteMonthBody) {
+  const params = new URLSearchParams({ month, ...(kind ? { kind } : {}) });
+  const res = await fetch(`/api/assignments/${id}?${params}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete month allocation");
+}
+
 /** One hook, one invalidation policy, for every assignment write in the app. */
 export function useAssignmentCommands() {
   const qc = useQueryClient();
@@ -38,5 +46,6 @@ export function useAssignmentCommands() {
   };
   const upsert = useMutation({ mutationFn: putAssignment, onSuccess: invalidate });
   const remove = useMutation({ mutationFn: deleteAssignment, onSuccess: invalidate });
-  return { upsert, remove };
+  const removeMonth = useMutation({ mutationFn: deleteAssignmentMonth, onSuccess: invalidate });
+  return { upsert, remove, removeMonth };
 }
