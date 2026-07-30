@@ -33,8 +33,23 @@ describe("getOverCapacityMonths", () => {
         existingHours: 100,
         proposedHours: 61,
         totalHours: 161,
+        overPercentage: 1,
       },
     ]);
+  });
+
+  it("reports how far past capacity the month lands as a percentage", () => {
+    const pctFor = (total: number) =>
+      getOverCapacityMonths({
+        existingByMonth: {},
+        proposedByMonth: { "2026-03-01": total },
+      })[0].overPercentage;
+
+    expect(pctFor(184)).toBe(15);
+    expect(pctFor(192)).toBe(20);
+    expect(pctFor(320)).toBe(100);
+    // Never rounds down to a meaningless "0% over".
+    expect(pctFor(161)).toBe(1);
   });
 
   it("only flags the offending month in a multi-month span", () => {
@@ -59,6 +74,7 @@ describe("getOverCapacityMonths", () => {
         existingHours: 170,
         proposedHours: 5,
         totalHours: 175,
+        overPercentage: 9,
       },
     ]);
   });

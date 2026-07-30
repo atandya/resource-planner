@@ -7,6 +7,7 @@ export type OverCapacityMonth = {
   existingHours: number;
   proposedHours: number;
   totalHours: number;
+  overPercentage: number; // how far past 160h, e.g. 184h -> 15
 };
 
 /**
@@ -32,6 +33,7 @@ export function getOverCapacityMonths(input: {
         existingHours,
         proposedHours,
         totalHours,
+        overPercentage: Math.round(((totalHours - MONTH_CAPACITY_HOURS) / MONTH_CAPACITY_HOURS) * 100),
       });
     }
   }

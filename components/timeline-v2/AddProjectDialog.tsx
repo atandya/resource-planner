@@ -500,8 +500,8 @@ export function AddProjectDialog({ createdByUuid: _createdByUuid }: AddProjectDi
                   {overCapacityMonths.length > 0 ? (
                     <p className="mt-2 text-xs text-red-500" data-testid="add-project-capacity-warning-text">
                       {overCapacityMonths
-                        .map((m) => `${m.monthLabel} would reach ${m.totalHours}h of 160h`)
-                        .join("; ")}
+                        .map((m) => `${m.monthLabel}: ${m.overPercentage}% over capacity`)
+                        .join(", ")}
                     </p>
                   ) : null}
                 </div>
@@ -536,10 +536,13 @@ export function AddProjectDialog({ createdByUuid: _createdByUuid }: AddProjectDi
               <AlertDialogTitle>Over monthly capacity</AlertDialogTitle>
             </div>
             <AlertDialogDescription asChild>
-              <div className="mt-3 space-y-1.5">
+              <div className="mt-3 space-y-1">
                 {overCapacityMonths.map((m) => (
-                  <div key={m.month} className="text-sm font-medium text-foreground">
-                    {m.monthLabel} — {m.totalHours}h of 160h ({m.existingHours}h already planned + {m.proposedHours}h)
+                  <div key={m.month} className="text-sm text-foreground">
+                    <span className="font-semibold">
+                      {m.monthLabel}: {m.overPercentage}% over
+                    </span>{" "}
+                    <span className="text-muted-foreground">({m.totalHours}h of 160h)</span>
                   </div>
                 ))}
               </div>
