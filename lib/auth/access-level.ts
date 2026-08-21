@@ -22,6 +22,7 @@ export const FULL_ACCESS_NIKS = [
   'L-357', // Brama Danuwinata
   'L-427', // Arinda Shabrina
   'L-410', // Dolorosa Raras Cindewangi
+  'L-428', // Cut Trieara Nantina A
 ];
 
 // Departments whose members ALL get full access (matched by dept_id).
